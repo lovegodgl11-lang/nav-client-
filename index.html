@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="Market place with chat"><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="Full client panel "><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
@@ -70,6 +70,8 @@
             </div>
         </header>
         
+        <div id="active-rentals-section" class="mb-6"></div>
+
         <div class="border-b border-gray-200 mb-4">
             <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                 <button data-tab="my-orders" class="tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">My Stitching Orders</button>
@@ -127,10 +129,12 @@
         let currentUser = null;
         let allCustomers = [];
         let allProducts = [];
+        let allTransactions = [];
         let notifications = [];
         let unreadCount = 0;
         let voiceEnabled = true;
         let cart = [];
+        let rentalCountdownInterval = null;
 
         const ADMIN_MOBILE = "0000000000"; // Placeholder for Admin's mobile number
         const ADMIN_WHATSAPP_NUMBER = "917696272780";
@@ -172,9 +176,12 @@
             currentUser = { mobile };
             localStorage.setItem('loggedInUser', JSON.stringify(currentUser));
             
-            const customersRef = firebase.database().ref('customers');
-            const snapshot = await customersRef.once('value');
-            allCustomers = Object.values(snapshot.val() || {});
+            const [customersSnap, transactionsSnap] = await Promise.all([
+                firebase.database().ref('customers').once('value'),
+                firebase.database().ref('transactions').once('value')
+            ]);
+            allCustomers = Object.values(customersSnap.val() || {});
+            allTransactions = Object.values(transactionsSnap.val() || {});
             
             const customer = allCustomers.find(c => c.mobile === mobile);
             
@@ -184,12 +191,14 @@
             
             setupNotificationListener();
             setupChatListener();
+            renderMyActiveRentals();
             switchTab('my-orders');
         }
         
         document.getElementById('logout-btn').addEventListener('click', () => {
              if (notificationListener) notificationListener.off();
              if (chatListener) chatListener.off();
+             if (rentalCountdownInterval) clearInterval(rentalCountdownInterval);
              currentUser = null;
              localStorage.removeItem('loggedInUser');
              mainView.classList.add('hidden');
@@ -203,6 +212,7 @@
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
+            renderMyActiveRentals(); // Always refresh rental status
             switch(tabId) {
                 case 'my-orders': renderMyOrders(); break;
                 case 'my-ledger': renderMyLedger(); break;
@@ -246,14 +256,9 @@
             tabContent.innerHTML = `<p>Loading your marketplace ledger...</p>`;
             if (!currentUser) return;
 
-            // Fetch products and transactions in parallel
-            const [productsSnap, transactionsSnap] = await Promise.all([
-                db.ref('marketplaceProducts').once('value'),
-                db.ref('transactions').once('value')
-            ]);
+            // Fetch products in parallel
+            const productsSnap = await db.ref('marketplaceProducts').once('value');
             const products = productsSnap.val() || {};
-            const allTransactions = Object.values(transactionsSnap.val() || {});
-
             const myTransactions = allTransactions.filter(t => t.buyerMobile === currentUser.mobile || t.sellerMobile === currentUser.mobile);
 
             if (myTransactions.length === 0) {
@@ -269,21 +274,20 @@
                 const isBuyer = t.buyerMobile === currentUser.mobile;
                 const amount = parseFloat(t.amountPaid) || 0;
                 const commission = parseFloat(t.commission) || 0;
-                const netAmount = isBuyer ? amount : amount - commission;
                 
                 let description, role, debit, credit;
 
                 if (isBuyer) {
-                    description = `Purchased: ${product.title}`;
+                    description = `${t.type === 'rent' ? 'Rented' : 'Purchased'}: ${product.title}`;
                     role = 'Buyer';
-                    debit = amount; // Buyer pays full amount
+                    debit = amount;
                     credit = 0;
                     totalDebit += debit;
                 } else {
                     description = `Sold: ${product.title}`;
                     role = 'Seller';
                     debit = 0;
-                    credit = netAmount; // Seller receives net amount after commission
+                    credit = amount - commission;
                     totalCredit += credit;
                 }
 
@@ -350,25 +354,31 @@
         async function renderProductGrid() {
             const content = document.getElementById('marketplace-content');
             content.innerHTML = `<p>Loading items...</p>`;
-            const productsRef = firebase.database().ref('marketplaceProducts').orderByChild('status').equalTo('approved');
-            const snapshot = await productsRef.once('value');
-            const productsData = snapshot.val() || {};
-            allProducts = Object.values(productsData);
+            
+            const [productsSnap, transactionsSnap] = await Promise.all([
+                db.ref('marketplaceProducts').once('value'),
+                db.ref('transactions').once('value')
+            ]);
+
+            const productsData = productsSnap.val() || {};
+            allProducts = Object.values(productsData).filter(p => p.status === 'approved' || p.status === 'sold');
+            allTransactions = Object.values(transactionsSnap.val() || {});
 
             if(allProducts.length === 0) {
                 content.innerHTML = `<p>No items listed in the marketplace yet.</p>`;
                 return;
             }
+            
+            const activeRentals = new Set(
+                allTransactions
+                    .filter(t => t.type === 'rent' && t.status === 'rented_out')
+                    .map(t => t.productId)
+            );
 
             const getGoogleDriveImageUrl = (sharingUrl) => {
-                if (!sharingUrl || !sharingUrl.includes('drive.google.com')) {
-                    return sharingUrl || 'https://via.placeholder.com/300x200.png?text=No+Image';
-                }
+                if (!sharingUrl || !sharingUrl.includes('drive.google.com')) return sharingUrl || 'https://via.placeholder.com/300x200.png?text=No+Image';
                 const fileIdMatch = sharingUrl.match(/file\/d\/([a-zA-Z0-9_-]+)/);
-                if (fileIdMatch && fileIdMatch[1]) {
-                    const fileId = fileIdMatch[1];
-                    return `https://drive.google.com/uc?export=view&id=${fileId}`;
-                }
+                if (fileIdMatch && fileIdMatch[1]) return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
                 return 'https://via.placeholder.com/300x200.png?text=Invalid+Link';
             };
 
@@ -376,12 +386,33 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     ${allProducts.map(p => {
                         const imageUrl = getGoogleDriveImageUrl(p.imageUrl);
-                        let priceHTML = '';
+                        const isRented = activeRentals.has(p.id);
+                        const isSold = p.status === 'sold';
+                        
+                        let priceHTML = '', rentButtonHTML = '';
                         if (p.listingType === 'sale' || p.listingType === 'both') {
                             priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy at ₹${p.price}</p>`;
                         }
                         if (p.listingType === 'rent' || p.listingType === 'both') {
                             priceHTML += `<p class="text-md text-gray-700">Rent at ₹${p.rentPrice}/day</p>`;
+                             if(isRented) {
+                                rentButtonHTML = `<div class="w-full text-center text-amber-600 font-bold p-2 bg-amber-100 rounded-md">Currently Rented</div>`;
+                            }
+                        }
+
+                        let actionButtons = '';
+                        if (isSold) {
+                            actionButtons = `<div class="w-full text-center text-red-600 font-bold p-2 bg-red-100 rounded-md">Out of Stock</div>`;
+                        } else if (p.sellerMobile !== currentUser.mobile) {
+                            actionButtons = `
+                                <button onclick="contactAdminForProduct('${p.title}')" class="w-1/2 bg-gray-200 text-gray-800 py-2 rounded-md hover:bg-gray-300 font-semibold text-sm flex items-center justify-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654z M12 5.583c.365 0 .703.111 1.002.316l.11.063c.27.185.27.516.035.797l-2.455 4.095c-.236.394-.099.811.306 1.018l.112.054c.48.243.987.362 1.553.362.593 0 1.192-.128 1.776-.39l.114-.05c.345-.165.732.14.595.53l-1.264 3.447c-.137.39-.56.632-.99.533l-.116-.023c-1.003-.19-1.958-.613-2.813-1.258l-.092-.063c-.855-.645-1.523-1.476-1.95-2.435l-.048-.113c-.237-.563.264-1.08.872-1.042l.115.006c.48.023.935.165 1.348.42l.09.048c.305.165.65.048.797-.264l1.18-2.455c.148-.318.048-.714-.249-.888l-.092-.048c-.287-.156-.593-.243-.913-.243-.332 0-.655.086-.948.243l-.09.056c-.33.208-.768.035-.872-.345l-.27-1.13c-.104-.428.165-.833.595-.913l.116-.023c.332-.063.67-.094 1.018-.094z"/></svg>
+                                    Contact
+                                </button>
+                                <button onclick="addToCart('${p.id}')" class="w-1/2 bg-indigo-500 text-white py-2 rounded-md hover:bg-indigo-600 font-semibold text-sm ${isRented ? 'opacity-50 cursor-not-allowed' : ''}" ${isRented ? 'disabled' : ''}>Add to Cart</button>
+                            `;
+                        } else {
+                            actionButtons = `<p class="w-full text-center text-sm text-gray-500 font-semibold p-2">Your Listing</p>`;
                         }
 
                         return `
@@ -391,13 +422,8 @@
                                 <h3 class="font-bold text-lg text-gray-800">${p.title}</h3>
                                 <p class="text-sm text-gray-600 mt-1 flex-grow">${p.description}</p>
                                 <div class="mt-4">${priceHTML}</div>
-                                <div class="mt-4 flex gap-2">
-                                    <button onclick="contactAdminForProduct('${p.title}')" class="w-1/2 bg-gray-200 text-gray-800 py-2 rounded-md hover:bg-gray-300 font-semibold text-sm flex items-center justify-center gap-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654z M12 5.583c.365 0 .703.111 1.002.316l.11.063c.27.185.27.516.035.797l-2.455 4.095c-.236.394-.099.811.306 1.018l.112.054c.48.243.987.362 1.553.362.593 0 1.192-.128 1.776-.39l.114-.05c.345-.165.732.14.595.53l-1.264 3.447c-.137.39-.56.632-.99.533l-.116-.023c-1.003-.19-1.958-.613-2.813-1.258l-.092-.063c-.855-.645-1.523-1.476-1.95-2.435l-.048-.113c-.237-.563.264-1.08.872-1.042l.115.006c.48.023.935.165 1.348.42l.09.048c.305.165.65.048.797-.264l1.18-2.455c.148-.318.048-.714-.249-.888l-.092-.048c-.287-.156-.593-.243-.913-.243-.332 0-.655.086-.948.243l-.09.056c-.33.208-.768.035-.872-.345l-.27-1.13c-.104-.428.165-.833.595-.913l.116-.023c.332-.063.67-.094 1.018-.094z"/></svg>
-                                        Contact Admin
-                                    </button>
-                                    ${p.sellerMobile !== currentUser.mobile ? `<button onclick="addToCart('${p.id}')" class="w-1/2 bg-indigo-500 text-white py-2 rounded-md hover:bg-indigo-600 font-semibold text-sm">Add to Cart</button>` : `<p class="w-1/2 text-center text-sm text-gray-500 font-semibold p-2">Your Listing</p>`}
-                                </div>
+                                <div class="mt-2">${rentButtonHTML}</div>
+                                <div class="mt-auto pt-4 flex gap-2">${actionButtons}</div>
                             </div>
                         </div>
                     `}).join('')}
@@ -882,15 +908,22 @@
                     amountPaid: product.cartItemType === 'rent' ? product.rentalTotal + (product.securityDeposit || 0) : product.price,
                     commission: (parseFloat(product.price) || 0) * 0.10, // Commission based on sale price regardless of type
                     timestamp: firebase.database.ServerValue.TIMESTAMP,
-                    status: 'pending',
                     type: product.cartItemType // 'sale' or 'rent'
                 };
                  if (product.cartItemType === 'rent') {
                     transaction.rentalDays = product.rentalDays;
                     transaction.securityDeposit = product.securityDeposit || 0;
+                    transaction.status = 'rented_out';
+                } else {
+                    transaction.status = 'pending';
                 }
                 
                 await db.ref('transactions/' + transaction.id).set(transaction);
+                
+                // If it's a sale, mark the product as sold.
+                if (product.cartItemType === 'sale') {
+                    await db.ref(`marketplaceProducts/${product.id}`).update({ status: 'sold' });
+                }
                 
                 // Notify admin
                 const adminNotifRef = db.ref('adminNotifications').push();
@@ -912,6 +945,68 @@
         function contactAdminForProduct(productTitle) {
             const message = encodeURIComponent(`Hi, I am interested in your product: ${productTitle}`);
             window.open(`https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${message}`, '_blank');
+        }
+
+        function renderMyActiveRentals() {
+            const rentalSection = document.getElementById('active-rentals-section');
+            if (!currentUser) return;
+
+            const myRentals = allTransactions.filter(t => t.buyerMobile === currentUser.mobile && t.type === 'rent' && t.status === 'rented_out');
+
+            if (myRentals.length === 0) {
+                rentalSection.innerHTML = '';
+                return;
+            }
+
+            const rentalCards = myRentals.map(t => {
+                 const startDate = new Date(t.timestamp);
+                 const dueDate = new Date(startDate);
+                 dueDate.setDate(startDate.getDate() + t.rentalDays);
+
+                return `
+                    <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500 mb-2">
+                        <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
+                        <p class="text-sm">Due Date: ${dueDate.toLocaleDateString()}</p>
+                        <div class="text-lg font-bold mt-1" data-due-date="${dueDate.toISOString()}"></div>
+                    </div>
+                `;
+            }).join('');
+            
+            rentalSection.innerHTML = `<h2 class="text-lg font-bold mb-2">My Active Rentals</h2>${rentalCards}`;
+            
+            updateCountdownTimers();
+            if (rentalCountdownInterval) clearInterval(rentalCountdownInterval);
+            rentalCountdownInterval = setInterval(updateCountdownTimers, 1000);
+        }
+
+        function updateCountdownTimers() {
+            document.querySelectorAll('[data-due-date]').forEach(el => {
+                const dueDate = new Date(el.dataset.dueDate);
+                const now = new Date();
+                const diff = dueDate - now;
+
+                if (diff < 0) {
+                    el.innerHTML = `<span class="text-red-600">Overdue by ${formatDuration(Math.abs(diff))}</span>`;
+                } else {
+                    el.innerHTML = `<span class="text-green-600">${formatDuration(diff)} remaining</span>`;
+                }
+            });
+        }
+        
+        function formatDuration(ms) {
+            let seconds = Math.floor(ms / 1000);
+            let minutes = Math.floor(seconds / 60);
+            let hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            hours %= 24;
+            minutes %= 60;
+            seconds %= 60;
+
+            if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+            if (minutes > 0) return `${minutes}m ${seconds}s`;
+            return `${seconds}s`;
         }
 
         // --- INITIALIZATION ---
