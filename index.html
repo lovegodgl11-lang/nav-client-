@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="Voice notification "><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="Update version "><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
@@ -106,6 +106,19 @@
                 <p class="text-sm text-gray-600 mb-4">Minor adjustments post-delivery are included within 7 days of pickup. Major changes may incur additional charges.</p>
                 <h4 class="font-semibold">4. Marketplace</h4>
                 <p class="text-sm text-gray-600 mb-4">The marketplace is a platform for users to connect. We are not responsible for the quality, safety, or legality of items listed. All transactions are between the buyer and seller.</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Promotion Modal -->
+    <div id="promotion-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <div class="p-4 border-b bg-indigo-500 text-white rounded-t-lg">
+                <h3 class="text-lg font-bold">A Message from Navrose Stitching Point</h3>
+            </div>
+            <div id="promotion-message-content" class="p-6 overflow-y-auto"></div>
+            <div class="p-4 border-t text-right bg-gray-50 rounded-b-lg">
+                <button onclick="document.getElementById('promotion-modal').classList.add('hidden')" class="bg-indigo-600 text-white font-semibold py-2 px-6 rounded-lg">Close</button>
             </div>
         </div>
     </div>
@@ -273,7 +286,6 @@
             tabContent.innerHTML = `<p>Loading your marketplace ledger...</p>`;
             if (!currentUser) return;
 
-            // Fetch products in parallel
             const productsSnap = await db.ref('marketplaceProducts').once('value');
             const products = productsSnap.val() || {};
             const myTransactions = allTransactions.filter(t => t.buyerMobile === currentUser.mobile || t.sellerMobile === currentUser.mobile);
@@ -285,14 +297,11 @@
 
             let totalDebit = 0;
             let totalCredit = 0;
+            let ledgerLines = [];
 
-            const tableRows = myTransactions.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(t => {
+            myTransactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).forEach(t => {
                 const product = products[t.productId] || { title: 'Unknown Item' };
                 const isBuyer = t.buyerMobile === currentUser.mobile;
-                const amount = parseFloat(t.amountPaid) || 0;
-                const commission = parseFloat(t.commission) || 0;
-                
-                let description, role, debit, credit;
                 
                 let variantInfo = '';
                 if (t.selectedSize || t.selectedColor) {
@@ -303,31 +312,48 @@
                 }
 
                 if (isBuyer) {
-                    description = `${t.type === 'rent' ? 'Rented' : 'Purchased'}: ${product.title}${variantInfo}`;
-                    role = 'Buyer';
-                    debit = amount;
-                    credit = 0;
-                    totalDebit += debit;
-                } else {
-                    description = `Sold: ${product.title}${variantInfo}`;
-                    role = 'Seller';
-                    debit = 0;
-                    credit = amount - commission;
-                    totalCredit += credit;
+                    if (t.type === 'sale') {
+                        ledgerLines.push({ date: t.timestamp, description: `Purchased: ${product.title}${variantInfo}`, debit: t.amountPaid, credit: 0 });
+                    } else if (t.type === 'rent') {
+                        ledgerLines.push({ date: t.timestamp, description: `Rent Fee: ${product.title}${variantInfo}`, debit: t.rentalTotal, credit: 0 });
+                        if (t.securityDeposit > 0) {
+                            ledgerLines.push({ date: t.timestamp, description: `Security Deposit Paid`, debit: t.securityDeposit, credit: 0, isDeposit: true });
+                        }
+                        if (t.depositStatus === 'returned' && t.securityDeposit > 0) {
+                           ledgerLines.push({ date: t.timestamp + 1, description: `Security Deposit Returned`, debit: 0, credit: t.securityDeposit, isDeposit: true });
+                        }
+                    }
+                } else { // Is Seller
+                    if (t.type === 'sale') {
+                        const netReceived = (t.amountPaid || 0) - (t.commission || 0);
+                        ledgerLines.push({ date: t.timestamp, description: `Sold: ${product.title}${variantInfo}`, debit: 0, credit: netReceived });
+                    } else if (t.type === 'rent') {
+                        const netRentReceived = (t.rentalTotal || 0) - (t.commission || 0);
+                        ledgerLines.push({ date: t.timestamp, description: `Rent Received: ${product.title}${variantInfo}`, debit: 0, credit: netRentReceived });
+                        
+                        if (t.securityDeposit > 0) {
+                            ledgerLines.push({ date: t.timestamp, description: `Security Deposit Held from Buyer`, debit: 0, credit: t.securityDeposit, isDeposit: true });
+                        }
+                        if (t.depositStatus === 'returned' && t.securityDeposit > 0) {
+                           ledgerLines.push({ date: t.timestamp + 1, description: `Security Deposit Returned to Buyer`, debit: t.securityDeposit, credit: 0, isDeposit: true });
+                        }
+                    }
                 }
-
+            });
+            
+            const tableRows = ledgerLines.map(line => {
+                totalDebit += line.debit || 0;
+                totalCredit += line.credit || 0;
                 return `
-                    <tr class="border-b">
-                        <td class="p-3">${new Date(t.timestamp).toLocaleDateString()}</td>
-                        <td class="p-3">${description}</td>
-                        <td class="p-3">${role}</td>
-                        <td class="p-3 font-mono text-right text-red-600">${debit > 0 ? `₹${debit.toFixed(2)}` : ''}</td>
-                        <td class="p-3 font-mono text-right text-green-600">${credit > 0 ? `₹${credit.toFixed(2)}` : ''}</td>
-                        <td class="p-3 capitalize">${(t.status || 'unknown').replace(/_/g, ' ')}</td>
+                    <tr class="border-b ${line.isDeposit ? 'bg-gray-50 text-gray-600' : ''}">
+                        <td class="p-3">${new Date(line.date).toLocaleDateString()}</td>
+                        <td class="p-3">${line.description}</td>
+                        <td class="p-3 font-mono text-right text-red-600">${line.debit > 0 ? `₹${line.debit.toFixed(2)}` : ''}</td>
+                        <td class="p-3 font-mono text-right text-green-600">${line.credit > 0 ? `₹${line.credit.toFixed(2)}` : ''}</td>
                     </tr>
                 `;
             }).join('');
-            
+
             const netBalance = totalCredit - totalDebit;
 
             tabContent.innerHTML = `
@@ -337,19 +363,20 @@
                             <tr>
                                 <th class="p-3 font-semibold">Date</th>
                                 <th class="p-3 font-semibold">Description</th>
-                                <th class="p-3 font-semibold">Role</th>
                                 <th class="p-3 font-semibold text-right">Debit (Paid)</th>
                                 <th class="p-3 font-semibold text-right">Credit (Received)</th>
-                                <th class="p-3 font-semibold">Status</th>
                             </tr>
                         </thead>
                         <tbody>${tableRows}</tbody>
                         <tfoot class="font-bold bg-gray-100">
                             <tr>
-                                <td colspan="3" class="p-3 text-right">Totals</td>
+                                <td colspan="2" class="p-3 text-right">Totals</td>
                                 <td class="p-3 font-mono text-right text-red-600">₹${totalDebit.toFixed(2)}</td>
                                 <td class="p-3 font-mono text-right text-green-600">₹${totalCredit.toFixed(2)}</td>
-                                <td class="p-3 text-right">Net: <span class="${netBalance >= 0 ? 'text-green-600' : 'text-red-600'}">₹${netBalance.toFixed(2)}</span></td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="p-3 text-right">Net Balance</td>
+                                <td class="p-3 font-mono text-right ${netBalance >= 0 ? 'text-green-600' : 'text-red-600'}">₹${netBalance.toFixed(2)}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -423,11 +450,12 @@
             
             const productsSnap = await db.ref('marketplaceProducts').once('value');
             const productsData = productsSnap.val() || {};
-            allProducts = Object.values(productsData).filter(p => p.status === 'approved' || p.status === 'sold');
+            allProducts = Object.values(productsData).filter(p => p.status === 'approved' || p.status === 'sold' || p.sellerMobile === currentUser.mobile);
             
             renderFilters(allProducts);
 
             const filteredProducts = allProducts.filter(p => {
+                if (p.status !== 'approved' && p.sellerMobile !== currentUser.mobile) return false;
                 const colorMatch = activeFilters.color === 'all' || (p.colors && p.colors.includes(activeFilters.color));
                 const sizeMatch = activeFilters.size === 'all' || (p.inventory && Object.keys(p.inventory).includes(activeFilters.size));
                 return colorMatch && sizeMatch;
@@ -495,7 +523,12 @@
                         let actionButtons = '';
                         if (isSold) {
                             actionButtons = `<div class="w-full text-center text-red-600 font-bold p-2 bg-red-100 rounded-md">Out of Stock</div>`;
-                        } else if (p.sellerMobile !== currentUser.mobile) {
+                        } else if (p.sellerMobile === currentUser.mobile) {
+                            actionButtons = `
+                                <button onclick="openEditForm('${p.id}')" class="w-1/2 bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 font-semibold text-sm">Edit</button>
+                                <button onclick="deleteMyProduct('${p.id}')" class="w-1/2 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 font-semibold text-sm">Delete</button>
+                            `;
+                        } else {
                             actionButtons = `
                                 <button onclick="contactAdminForProduct('${p.title}')" class="w-1/2 bg-gray-200 text-gray-800 py-2 rounded-md hover:bg-gray-300 font-semibold text-sm flex items-center justify-center gap-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654z M12 5.583c.365 0 .703.111 1.002.316l.11.063c.27.185.27.516.035.797l-2.455 4.095c-.236.394-.099.811.306 1.018l.112.054c.48.243.987.362 1.553.362.593 0 1.192-.128 1.776-.39l.114-.05c.345-.165.732.14.595.53l-1.264 3.447c-.137.39-.56.632-.99.533l-.116-.023c-1.003-.19-1.958-.613-2.813-1.258l-.092-.063c-.855-.645-1.523-1.476-1.95-2.435l-.048-.113c-.237-.563.264-1.08.872-1.042l.115.006c.48.023.935.165 1.348.42l.09.048c.305.165.65.048.797-.264l1.18-2.455c.148-.318.048-.714-.249-.888l-.092-.048c-.287-.156-.593-.243-.913-.243-.332 0-.655.086-.948.243l-.09.056c-.33.208-.768.035-.872-.345l-.27-1.13c-.104-.428.165-.833.595-.913l.116-.023c.332-.063.67-.094 1.018-.094z"/></svg>
@@ -503,8 +536,6 @@
                                 </button>
                                 <button onclick="addToCart('${p.id}')" class="w-1/2 bg-indigo-500 text-white py-2 rounded-md hover:bg-indigo-600 font-semibold text-sm ${isRented ? 'opacity-50 cursor-not-allowed' : ''}" ${isRented ? 'disabled' : ''}>Add to Cart</button>
                             `;
-                        } else {
-                            actionButtons = `<p class="w-full text-center text-sm text-gray-500 font-semibold p-2">Your Listing</p>`;
                         }
 
                         return `
@@ -1096,6 +1127,16 @@
         async function placeOrder() {
             if (cart.length === 0) return;
 
+            const hasRental = cart.some(item => item.cartItemType === 'rent');
+            if (hasRental) {
+                const confirmationMessage = "Attention: By proceeding, you agree that if the rented garment is damaged or not returned on time, charges will be deducted from your security deposit.";
+                const userConfirmed = confirm(confirmationMessage);
+                if (!userConfirmed) {
+                    showToast("Order cancelled.");
+                    return;
+                }
+            }
+
             const subtotal = cart.reduce((sum, p) => {
                 if (p.cartItemType === 'rent') return sum + p.rentalTotal + (p.securityDeposit || 0);
                 return sum + ((parseFloat(p.price) || 0) * p.quantity);
@@ -1154,8 +1195,10 @@
                 };
                  if (product.cartItemType === 'rent') {
                     transaction.rentalDays = product.rentalDays;
+                    transaction.rentalTotal = product.rentalTotal;
                     transaction.securityDeposit = product.securityDeposit || 0;
                     transaction.status = 'rented_out';
+                    transaction.depositStatus = 'held';
                 } else {
                     transaction.status = 'pending';
                 }
@@ -1214,7 +1257,10 @@
 
                 return `
                     <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500 mb-2">
-                        <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
+                        <div class="flex justify-between items-start">
+                            <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
+                            <span class="text-sm font-semibold text-gray-600">Deposit: ₹${(t.securityDeposit || 0).toFixed(2)}</span>
+                        </div>
                         <p class="text-sm">Due Date: ${dueDate.toLocaleDateString()}</p>
                         <div class="text-lg font-bold mt-1" data-due-date="${dueDate.toISOString()}"></div>
                     </div>
@@ -1507,12 +1553,151 @@
             updateCartTotals();
         }
 
+        // --- SELLER EDIT/DELETE ---
+        async function deleteMyProduct(productId) {
+            if (confirm("Are you sure you want to delete this listing? This action cannot be undone.")) {
+                try {
+                    await db.ref('marketplaceProducts/' + productId).remove();
+                    showToast("Listing deleted successfully.");
+                    // Fetch fresh data and re-render
+                    const productsSnap = await db.ref('marketplaceProducts').once('value');
+                    allProducts = Object.values(productsSnap.val() || {});
+                    renderProductGrid();
+                } catch (error) {
+                    showToast("Error deleting listing. Please try again.");
+                    console.error("Error deleting product:", error);
+                }
+            }
+        }
+
+        function openEditForm(productId) {
+            const product = allProducts.find(p => p.id === productId);
+            if (!product) { showToast("Product not found."); return; }
+
+            const modalContainer = document.getElementById('modal-container');
+            const modalContent = document.getElementById('modal-content');
+
+            const listingTypeRadios = ['sale', 'rent', 'both'].map(type => `<label class="flex items-center"><input type="radio" name="editListingType" value="${type}" class="mr-2" ${product.listingType === type ? 'checked' : ''}> ${type.charAt(0).toUpperCase() + type.slice(1)}</label>`).join('');
+
+            const inventoryRows = product.inventory && Object.keys(product.inventory).length > 0
+                ? Object.entries(product.inventory).map(([size, details]) => {
+                    const stock = typeof details === 'object' ? details.stock : details;
+                    const price = typeof details === 'object' ? details.price : '';
+                    const rentPrice = typeof details === 'object' ? details.rentPrice : '';
+                    return `<div class="grid grid-cols-1 sm:grid-cols-5 gap-2 inventory-row items-center p-2 border rounded-md"><input type="text" placeholder="Size" class="sm:col-span-1 border rounded-md p-2 text-sm size-input" value="${size}"><input type="number" placeholder="Stock" class="sm:col-span-1 border rounded-md p-2 text-sm stock-input" min="0" value="${stock}"><input type="number" placeholder="Sale Price" class="sm:col-span-1 border rounded-md p-2 text-sm sale-price-input" step="0.01" min="0" value="${price || ''}"><input type="number" placeholder="Rent Price" class="sm:col-span-1 border rounded-md p-2 text-sm rent-price-input" step="0.01" min="0" value="${rentPrice || ''}"><button type="button" class="sm:col-span-1 text-red-500 font-bold remove-size-btn justify-self-center">&times;</button></div>`;
+                }).join('')
+                : '';
+
+            modalContent.innerHTML = `
+            <form id="edit-item-form" class="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xl font-bold">Edit Item</h3>
+                    <button type="button" onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-2xl">&times;</button>
+                </div>
+                <div><label for="edit-title" class="text-sm font-medium">Title</label><input type="text" id="edit-title" value="${product.title || ''}" class="mt-1 block w-full border rounded-md p-2" required></div>
+                <div><label for="edit-description" class="text-sm font-medium">Description</label><textarea id="edit-description" rows="3" class="mt-1 block w-full border rounded-md p-2">${product.description || ''}</textarea></div>
+                <div><label class="text-sm font-medium">Listing Type</label><div class="mt-2 flex gap-4">${listingTypeRadios}</div></div>
+                
+                <div id="edit-sale-price-div"><label for="edit-price" class="text-sm font-medium">Sale Price (₹)</label><input type="number" id="edit-price" class="mt-1 block w-full border rounded-md p-2" value="${product.price || ''}"></div>
+                <div id="edit-rent-price-div" class="space-y-2"><label for="edit-rentPrice" class="text-sm font-medium">Rent Price/day (₹)</label><input type="number" id="edit-rentPrice" value="${product.rentPrice || ''}" class="mt-1 block w-full border rounded-md p-2"><label for="edit-securityDeposit" class="text-sm font-medium">Security Deposit (₹)</label><input type="number" id="edit-securityDeposit" value="${product.securityDeposit || ''}" class="mt-1 block w-full border rounded-md p-2"></div>
+
+                <div class="space-y-4 pt-4 border-t">
+                    <div><label for="edit-colors" class="text-sm font-medium">Colors (comma-separated)</label><input type="text" id="edit-colors" value="${(product.colors || []).join(', ')}" class="mt-1 block w-full border rounded-md p-2"></div>
+                    <div><label class="text-sm font-medium">Sizes, Stock & Prices</label><div id="edit-inventory-container" class="space-y-2 mt-2">${inventoryRows}</div><button type="button" id="edit-add-size-btn" class="mt-2 text-sm text-indigo-600 hover:underline">+ Add Size/Variant</button></div>
+                </div>
+                <div class="flex justify-end gap-2 pt-4 border-t"><button type="submit" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md">Save Changes</button></div>
+            </form>`;
+
+            modalContainer.classList.remove('hidden');
+
+            const editForm = document.getElementById('edit-item-form');
+            const toggleEditPrices = () => {
+                const hasVariants = editForm.querySelector('.inventory-row');
+                const type = editForm.querySelector('input[name="editListingType"]:checked').value;
+                document.getElementById('edit-sale-price-div').style.display = (type === 'sale' || type === 'both') && !hasVariants ? 'block' : 'none';
+                document.getElementById('edit-rent-price-div').style.display = (type === 'rent' || type === 'both') ? 'block' : 'none';
+            };
+
+            const addEditSizeRow = () => {
+                const container = document.getElementById('edit-inventory-container');
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-1 sm:grid-cols-5 gap-2 inventory-row items-center p-2 border rounded-md';
+                row.innerHTML = `<input type="text" placeholder="Size" class="sm:col-span-1 border rounded-md p-2 text-sm size-input"><input type="number" placeholder="Stock" class="sm:col-span-1 border rounded-md p-2 text-sm stock-input" min="0"><input type="number" placeholder="Sale Price" class="sm:col-span-1 border rounded-md p-2 text-sm sale-price-input" step="0.01" min="0"><input type="number" placeholder="Rent Price" class="sm:col-span-1 border rounded-md p-2 text-sm rent-price-input" step="0.01" min="0"><button type="button" class="sm:col-span-1 text-red-500 font-bold remove-size-btn justify-self-center">&times;</button>`;
+                container.appendChild(row);
+                row.querySelector('.remove-size-btn').addEventListener('click', () => { row.remove(); toggleEditPrices(); });
+                toggleEditPrices();
+            };
+
+            editForm.addEventListener('click', e => {
+                if (e.target.id === 'edit-add-size-btn') addEditSizeRow();
+                if (e.target.classList.contains('remove-size-btn')) { e.target.closest('.inventory-row').remove(); toggleEditPrices(); }
+            });
+            editForm.querySelectorAll('input[name="editListingType"]').forEach(radio => radio.addEventListener('change', toggleEditPrices));
+
+            editForm.addEventListener('submit', async e => {
+                e.preventDefault();
+                const updates = { status: product.status }; // Preserve status
+                const hasVariants = editForm.querySelectorAll('.inventory-row').length > 0;
+                updates.title = document.getElementById('edit-title').value;
+                updates.description = document.getElementById('edit-description').value;
+                updates.listingType = editForm.querySelector('input[name="editListingType"]:checked').value;
+                updates.colors = document.getElementById('edit-colors').value.split(',').map(c => c.trim()).filter(Boolean);
+                
+                if (hasVariants) {
+                    updates.inventory = {};
+                    editForm.querySelectorAll('.inventory-row').forEach(row => {
+                        const size = row.querySelector('.size-input').value.trim().toUpperCase();
+                        if (size) {
+                            updates.inventory[size] = {
+                                stock: parseInt(row.querySelector('.stock-input').value, 10) || 0,
+                                price: parseFloat(row.querySelector('.sale-price-input').value) || null,
+                                rentPrice: parseFloat(row.querySelector('.rent-price-input').value) || null,
+                            };
+                        }
+                    });
+                    updates.price = null;
+                    updates.rentPrice = null;
+                } else {
+                    updates.inventory = {};
+                    updates.price = (updates.listingType !== 'rent') ? parseFloat(document.getElementById('edit-price').value) || null : null;
+                    updates.rentPrice = (updates.listingType !== 'sale') ? parseFloat(document.getElementById('edit-rentPrice').value) || null : null;
+                }
+                updates.securityDeposit = (updates.listingType !== 'sale') ? parseFloat(document.getElementById('edit-securityDeposit').value) || null : null;
+
+                try {
+                    await db.ref('marketplaceProducts/' + productId).update(updates);
+                    showToast("Listing updated successfully.");
+                    modalContainer.classList.add('hidden');
+                    const productsSnap = await db.ref('marketplaceProducts').once('value');
+                    allProducts = Object.values(productsSnap.val() || {});
+                    renderProductGrid();
+                } catch (error) {
+                    showToast("Error updating listing.");
+                }
+            });
+            toggleEditPrices();
+        }
+
+        async function displayPromotion() {
+            if (!db) return;
+            try {
+                const promoSnap = await db.ref('marketplaceSettings/promotion').once('value');
+                const promo = promoSnap.val();
+                if (promo && promo.isActive && promo.message) {
+                    document.getElementById('promotion-message-content').textContent = promo.message;
+                    document.getElementById('promotion-modal').classList.remove('hidden');
+                }
+            } catch(e) { console.error("Could not fetch promotion", e); }
+        }
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
                 db = firebase.database();
             } catch(e) { console.error(e); alert("Firebase connection failed."); }
+
+            displayPromotion();
 
             const savedUser = localStorage.getItem('loggedInUser');
             if (savedUser) {
@@ -1575,6 +1760,11 @@
                 });
             }
         });
+        
+        // Make functions globally accessible
+        window.openEditForm = openEditForm;
+        window.deleteMyProduct = deleteMyProduct;
     </script>
+
 
 <script src="./script.js"></script></body></html>
