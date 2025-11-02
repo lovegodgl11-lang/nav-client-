@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="Full client panel "><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="Voice notification "><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
@@ -130,17 +130,21 @@
         let allCustomers = [];
         let allProducts = [];
         let allTransactions = [];
+        let marketplaceSettings = {};
         let notifications = [];
         let unreadCount = 0;
         let voiceEnabled = true;
         let cart = [];
+        let appliedPromo = null;
         let rentalCountdownInterval = null;
+        let activeFilters = { color: 'all', size: 'all' };
 
         const ADMIN_MOBILE = "0000000000"; // Placeholder for Admin's mobile number
         const ADMIN_WHATSAPP_NUMBER = "917696272780";
 
         let notificationListener = null;
         let chatListener = null;
+        let sellerListeners = [];
 
         const loginView = document.getElementById('login-view');
         const mainView = document.getElementById('main-view');
@@ -160,7 +164,7 @@
             utterance.lang = 'en-IN';
             speechSynthesis.speak(utterance);
         }
-
+        
         // --- AUTH ---
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -173,23 +177,34 @@
         });
 
         async function login(mobile) {
+            const customersSnap = await firebase.database().ref('customers').once('value');
+            allCustomers = Object.values(customersSnap.val() || {});
+            const customer = allCustomers.find(c => c.mobile === mobile);
+            
+            if (!customer) {
+                alert("please register first then login contact to 7696272780 for registration.");
+                return;
+            }
+
             currentUser = { mobile };
             localStorage.setItem('loggedInUser', JSON.stringify(currentUser));
             
-            const [customersSnap, transactionsSnap] = await Promise.all([
-                firebase.database().ref('customers').once('value'),
-                firebase.database().ref('transactions').once('value')
+            const [transactionsSnap, settingsSnap, productsSnap] = await Promise.all([
+                firebase.database().ref('transactions').once('value'),
+                firebase.database().ref('marketplaceSettings').once('value'),
+                firebase.database().ref('marketplaceProducts').once('value')
             ]);
-            allCustomers = Object.values(customersSnap.val() || {});
-            allTransactions = Object.values(transactionsSnap.val() || {});
             
-            const customer = allCustomers.find(c => c.mobile === mobile);
+            allTransactions = Object.values(transactionsSnap.val() || {});
+            marketplaceSettings = settingsSnap.val() || {};
+            allProducts = Object.values(productsSnap.val() || {});
             
             loginView.classList.add('hidden');
             mainView.classList.remove('hidden');
-            document.getElementById('customer-name-display').textContent = customer ? customer.name : `User ${mobile.slice(-4)}`;
+            document.getElementById('customer-name-display').textContent = customer.name;
             
             setupNotificationListener();
+            setupSellerListeners();
             setupChatListener();
             renderMyActiveRentals();
             switchTab('my-orders');
@@ -199,6 +214,8 @@
              if (notificationListener) notificationListener.off();
              if (chatListener) chatListener.off();
              if (rentalCountdownInterval) clearInterval(rentalCountdownInterval);
+             sellerListeners.forEach(listener => listener.ref.off(listener.event));
+             sellerListeners = [];
              currentUser = null;
              localStorage.removeItem('loggedInUser');
              mainView.classList.add('hidden');
@@ -276,15 +293,23 @@
                 const commission = parseFloat(t.commission) || 0;
                 
                 let description, role, debit, credit;
+                
+                let variantInfo = '';
+                if (t.selectedSize || t.selectedColor) {
+                    variantInfo = ` (${[t.selectedSize, t.selectedColor].filter(Boolean).join(', ')})`;
+                }
+                if (t.quantity) {
+                    variantInfo += ` x ${t.quantity}`;
+                }
 
                 if (isBuyer) {
-                    description = `${t.type === 'rent' ? 'Rented' : 'Purchased'}: ${product.title}`;
+                    description = `${t.type === 'rent' ? 'Rented' : 'Purchased'}: ${product.title}${variantInfo}`;
                     role = 'Buyer';
                     debit = amount;
                     credit = 0;
                     totalDebit += debit;
                 } else {
-                    description = `Sold: ${product.title}`;
+                    description = `Sold: ${product.title}${variantInfo}`;
                     role = 'Seller';
                     debit = 0;
                     credit = amount - commission;
@@ -338,6 +363,7 @@
                     <button data-subtab="browse" class="marketplace-tab-btn active p-3 font-semibold text-sm">Browse</button>
                     <button data-subtab="list" class="marketplace-tab-btn p-3 font-semibold text-sm">List an Item</button>
                 </div>
+                <div id="filters-container" class="my-4 bg-white p-4 rounded-lg shadow-sm flex flex-wrap gap-4 items-center"></div>
                 <div id="marketplace-content" class="mt-4"></div>
              `;
              document.querySelectorAll('.marketplace-tab-btn').forEach(btn => {
@@ -350,22 +376,65 @@
              });
              renderProductGrid();
         }
+        
+        function renderFilters(products) {
+            const filtersContainer = document.getElementById('filters-container');
+            if (!filtersContainer) return;
+
+            const allColors = [...new Set(products.flatMap(p => p.colors || []))];
+            const allSizes = [...new Set(products.flatMap(p => Object.keys(p.inventory || {})))];
+
+            filtersContainer.innerHTML = `
+                <span class="font-semibold">Filter by:</span>
+                <div>
+                    <label for="color-filter" class="text-sm font-medium mr-2">Color:</label>
+                    <select id="color-filter" class="border rounded-md p-2 text-sm">
+                        <option value="all">All Colors</option>
+                        ${allColors.map(c => `<option value="${c}" ${activeFilters.color === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label for="size-filter" class="text-sm font-medium mr-2">Size:</label>
+                    <select id="size-filter" class="border rounded-md p-2 text-sm">
+                        <option value="all">All Sizes</option>
+                        ${allSizes.map(s => `<option value="${s}" ${activeFilters.size === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                </div>
+                <button id="clear-filters-btn" class="text-sm text-indigo-600 hover:underline">Clear Filters</button>
+            `;
+
+            document.getElementById('color-filter').addEventListener('change', (e) => {
+                activeFilters.color = e.target.value;
+                renderProductGrid();
+            });
+            document.getElementById('size-filter').addEventListener('change', (e) => {
+                activeFilters.size = e.target.value;
+                renderProductGrid();
+            });
+            document.getElementById('clear-filters-btn').addEventListener('click', () => {
+                activeFilters = { color: 'all', size: 'all' };
+                renderProductGrid();
+            });
+        }
 
         async function renderProductGrid() {
             const content = document.getElementById('marketplace-content');
             content.innerHTML = `<p>Loading items...</p>`;
             
-            const [productsSnap, transactionsSnap] = await Promise.all([
-                db.ref('marketplaceProducts').once('value'),
-                db.ref('transactions').once('value')
-            ]);
-
+            const productsSnap = await db.ref('marketplaceProducts').once('value');
             const productsData = productsSnap.val() || {};
             allProducts = Object.values(productsData).filter(p => p.status === 'approved' || p.status === 'sold');
-            allTransactions = Object.values(transactionsSnap.val() || {});
+            
+            renderFilters(allProducts);
 
-            if(allProducts.length === 0) {
-                content.innerHTML = `<p>No items listed in the marketplace yet.</p>`;
+            const filteredProducts = allProducts.filter(p => {
+                const colorMatch = activeFilters.color === 'all' || (p.colors && p.colors.includes(activeFilters.color));
+                const sizeMatch = activeFilters.size === 'all' || (p.inventory && Object.keys(p.inventory).includes(activeFilters.size));
+                return colorMatch && sizeMatch;
+            });
+
+            if(filteredProducts.length === 0) {
+                content.innerHTML = `<p>No items match your filters in the marketplace yet.</p>`;
                 return;
             }
             
@@ -384,17 +453,40 @@
 
             content.innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    ${allProducts.map(p => {
+                    ${filteredProducts.map(p => {
                         const imageUrl = getGoogleDriveImageUrl(p.imageUrl);
                         const isRented = activeRentals.has(p.id);
                         const isSold = p.status === 'sold';
                         
-                        let priceHTML = '', rentButtonHTML = '';
-                        if (p.listingType === 'sale' || p.listingType === 'both') {
-                            priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy at ₹${p.price}</p>`;
+                        let priceHTML = '';
+                        const hasVariants = p.inventory && Object.keys(p.inventory).length > 0 && typeof Object.values(p.inventory)[0] === 'object';
+
+                        if (hasVariants) {
+                            const prices = Object.values(p.inventory).map(v => v.price).filter(p => p !== null && p > 0);
+                            const rentPrices = Object.values(p.inventory).map(v => v.rentPrice).filter(p => p !== null && p > 0);
+                            const minPrice = prices.length > 0 ? Math.min(...prices) : null;
+                            const minRentPrice = rentPrices.length > 0 ? Math.min(...rentPrices) : null;
+
+                            if ((p.listingType === 'sale' || p.listingType === 'both') && minPrice !== null) {
+                                priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy from ₹${minPrice}</p>`;
+                            }
+                            if ((p.listingType === 'rent' || p.listingType === 'both') && minRentPrice !== null) {
+                                priceHTML += `<p class="text-md text-gray-700">Rent from ₹${minRentPrice}/day</p>`;
+                            }
                         }
+
+                        // Fallback for simple products or if variant prices are missing
+                        if (!priceHTML) {
+                            if ((p.listingType === 'sale' || p.listingType === 'both') && p.price) {
+                                priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy at ₹${p.price}</p>`;
+                            }
+                            if ((p.listingType === 'rent' || p.listingType === 'both') && p.rentPrice) {
+                                priceHTML += `<p class="text-md text-gray-700">Rent at ₹${p.rentPrice}/day</p>`;
+                            }
+                        }
+
+                        let rentButtonHTML = '';
                         if (p.listingType === 'rent' || p.listingType === 'both') {
-                            priceHTML += `<p class="text-md text-gray-700">Rent at ₹${p.rentPrice}/day</p>`;
                              if(isRented) {
                                 rentButtonHTML = `<div class="w-full text-center text-amber-600 font-bold p-2 bg-amber-100 rounded-md">Currently Rented</div>`;
                             }
@@ -474,13 +566,51 @@
                         </div>
                     </div>
                     
+                    <div id="variant-section" class="space-y-4 pt-4 border-t">
+                        <div>
+                            <label for="colors" class="block text-sm font-medium text-gray-700">Available Colors (comma-separated)</label>
+                            <input type="text" id="colors" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="e.g., Red, Blue, Green">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Sizes, Stock & Prices</label>
+                            <p class="text-xs text-gray-500">Add variants if your item has different sizes with different prices. Otherwise, use the main price fields above.</p>
+                            <div id="inventory-container" class="space-y-2 mt-2"></div>
+                            <button type="button" id="add-size-btn" class="mt-2 text-sm text-indigo-600 hover:underline">+ Add Size/Variant</button>
+                        </div>
+                    </div>
+                    
                     <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 font-semibold">List Item for Approval</button>
                 </form>
             `;
             
             const saleDiv = document.getElementById('sale-price-div');
             const rentDiv = document.getElementById('rent-price-div');
-            document.querySelectorAll('input[name="listingType"]').forEach(radio => {
+            const listingTypeRadios = document.querySelectorAll('input[name="listingType"]');
+            
+            const addSizeBtn = document.getElementById('add-size-btn');
+            const inventoryContainer = document.getElementById('inventory-container');
+
+            const addSizeRow = () => {
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-1 sm:grid-cols-5 gap-2 inventory-row items-center p-2 border rounded-md';
+                row.innerHTML = `
+                    <input type="text" placeholder="Size (e.g., L)" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm size-input">
+                    <input type="number" placeholder="Stock" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm stock-input" min="0">
+                    <input type="number" placeholder="Sale Price (₹)" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm sale-price-input" step="0.01" min="0">
+                    <input type="number" placeholder="Rent Price/day (₹)" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm rent-price-input" step="0.01" min="0">
+                    <button type="button" class="sm:col-span-1 text-red-500 font-bold remove-size-btn justify-self-center">&times;</button>
+                `;
+                inventoryContainer.appendChild(row);
+                row.querySelector('.remove-size-btn').addEventListener('click', () => {
+                    row.remove();
+                    toggleMainPriceInputs();
+                });
+                toggleMainPriceInputs();
+            };
+
+            addSizeBtn.addEventListener('click', addSizeRow);
+            
+            listingTypeRadios.forEach(radio => {
                 radio.addEventListener('change', (e) => {
                     const type = e.target.value;
                     saleDiv.classList.toggle('hidden-form-field', !(type === 'sale' || type === 'both'));
@@ -488,7 +618,8 @@
                 });
             });
 
-            document.getElementById('list-item-form').addEventListener('submit', handleListSubmit);
+            // Initially call it
+            toggleMainPriceInputs();
         }
 
         async function handleListSubmit(e) {
@@ -497,15 +628,55 @@
             const listingType = document.querySelector('input[name="listingType"]:checked').value;
             const price = parseFloat(document.getElementById('price').value) || null;
             const rentPrice = parseFloat(document.getElementById('rentPrice').value) || null;
+            
+            const inventory = {};
+            let hasVariants = document.querySelectorAll('.inventory-row').length > 0;
 
-            if ((listingType === 'sale' || listingType === 'both') && !price) {
-                showToast("Please provide a sale price.");
-                return;
+            if (hasVariants) {
+                let allRowsValid = true;
+                let hasAnyData = false;
+                document.querySelectorAll('.inventory-row').forEach(row => {
+                    const size = row.querySelector('.size-input').value.trim().toUpperCase();
+                    if (size) {
+                        hasAnyData = true;
+                        const salePrice = parseFloat(row.querySelector('.sale-price-input').value) || null;
+                        const rentPriceVar = parseFloat(row.querySelector('.rent-price-input').value) || null;
+                        
+                        if ((listingType === 'sale' || listingType === 'both') && !salePrice) {
+                           allRowsValid = false;
+                        }
+                        if ((listingType === 'rent' || listingType === 'both') && !rentPriceVar) {
+                           allRowsValid = false;
+                        }
+
+                        inventory[size] = {
+                            stock: parseInt(row.querySelector('.stock-input').value, 10) || 0,
+                            price: salePrice,
+                            rentPrice: rentPriceVar,
+                        };
+                    }
+                });
+                
+                if (!hasAnyData) hasVariants = false; // Treat as simple product if no variant data entered
+
+                if (hasVariants && !allRowsValid) {
+                    showToast("Please provide a price for each variant size based on listing type.");
+                    return;
+                }
+            } 
+            
+            if (!hasVariants) {
+                 if ((listingType === 'sale' || listingType === 'both') && !price) {
+                    showToast("Please provide a sale price.");
+                    return;
+                }
+                if ((listingType === 'rent' || listingType === 'both') && !rentPrice) {
+                    showToast("Please provide a rent price.");
+                    return;
+                }
             }
-             if ((listingType === 'rent' || listingType === 'both') && !rentPrice) {
-                showToast("Please provide a rent price.");
-                return;
-            }
+            
+            const colors = document.getElementById('colors').value.split(',').map(c => c.trim()).filter(Boolean);
 
             const newProduct = {
                 id: Date.now().toString(),
@@ -514,12 +685,14 @@
                 title: document.getElementById('title').value,
                 description: document.getElementById('description').value,
                 listingType: listingType,
-                price: price,
-                rentPrice: rentPrice,
+                price: hasVariants ? null : price,
+                rentPrice: hasVariants ? null : rentPrice,
                 securityDeposit: parseFloat(document.getElementById('securityDeposit').value) || null,
                 status: 'pending_approval',
                 listedDate: new Date().toISOString(),
-                imageUrl: '' // Initially empty
+                imageUrl: '', // Initially empty
+                colors,
+                inventory: hasVariants ? inventory : {},
             };
 
 
@@ -572,6 +745,56 @@
                     addNotification(notif.body);
                 }
             });
+        }
+        
+        function setupSellerListeners() {
+            if (!currentUser) return;
+            const now = Date.now();
+
+            // 1. For new transactions (sale/rent of my items)
+            const newTransactionRef = db.ref('transactions').orderByChild('timestamp').startAt(now);
+            newTransactionRef.on('child_added', (snapshot) => {
+                const transaction = snapshot.val();
+                if (transaction && transaction.sellerMobile === currentUser.mobile) {
+                    const product = allProducts.find(p => p.id === transaction.productId);
+                    const productName = product ? product.title : 'your item';
+                    allTransactions.push(transaction); // update local cache
+                    if (transaction.type === 'rent') {
+                        addNotification(`Your item '${productName}' has been rented out.`);
+                    } else {
+                        addNotification(`Your item '${productName}' has been sold.`);
+                    }
+                }
+            });
+            sellerListeners.push({ ref: newTransactionRef, event: 'child_added' });
+
+            // 2. For my product status changes (approved/rejected)
+            const myProductsRef = db.ref('marketplaceProducts').orderByChild('sellerMobile').equalTo(currentUser.mobile);
+            myProductsRef.on('child_changed', (snapshot) => {
+                const product = snapshot.val();
+                const oldProduct = allProducts.find(p => p.id === product.id);
+                if (oldProduct && oldProduct.status !== product.status) {
+                    addNotification(`Update for '${product.title}': Status is now ${product.status.replace(/_/g, ' ')}.`);
+                    const index = allProducts.findIndex(p => p.id === product.id);
+                    if (index > -1) allProducts[index] = product;
+                }
+            });
+            sellerListeners.push({ ref: myProductsRef, event: 'child_changed' });
+            
+            // 3. For my transaction status changes (e.g., payout)
+            const myTransactionsRef = db.ref('transactions').orderByChild('sellerMobile').equalTo(currentUser.mobile);
+            myTransactionsRef.on('child_changed', (snapshot) => {
+                const transaction = snapshot.val();
+                const oldTransaction = allTransactions.find(t => t.id === transaction.id);
+                if (oldTransaction && oldTransaction.status !== 'payout_complete' && transaction.status === 'payout_complete') {
+                    const product = allProducts.find(p => p.id === transaction.productId);
+                    const productName = product ? product.title : 'your item';
+                    addNotification(`Payment received for the sale of '${productName}'.`);
+                    const index = allTransactions.findIndex(t => t.id === transaction.id);
+                    if (index > -1) allTransactions[index] = transaction;
+                }
+            });
+            sellerListeners.push({ ref: myTransactionsRef, event: 'child_changed' });
         }
         
         // --- CHAT ---
@@ -661,7 +884,8 @@
         // --- CART LOGIC ---
         function updateCartBadge() {
             const badge = document.getElementById('cart-badge');
-            badge.textContent = cart.length;
+            const uniqueItems = new Set(cart.map(item => item.id));
+            badge.textContent = uniqueItems.size;
             badge.classList.toggle('hidden', cart.length === 0);
         }
 
@@ -680,23 +904,22 @@
                     </div>
                     <p class="text-sm text-gray-600 my-4">This item is available for both sale and rent.</p>
                     <div class="flex gap-4">
-                        <button id="buy-option-btn" class="flex-1 bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700">Buy for ₹${product.price}</button>
-                        <button id="rent-option-btn" class="flex-1 bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700">Rent for ₹${product.rentPrice}/day</button>
+                        <button id="buy-option-btn" class="flex-1 bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700">Buy</button>
+                        <button id="rent-option-btn" class="flex-1 bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700">Rent</button>
                     </div>
                 </div>
             `;
             modalContainer.classList.remove('hidden');
 
             document.getElementById('buy-option-btn').onclick = () => {
-                addToCart(productId, 'sale');
-                document.getElementById('modal-container').classList.add('hidden');
+                showVariantSelectionModal(productId, 'sale');
             };
             document.getElementById('rent-option-btn').onclick = () => {
-                showRentalModal(productId);
+                showVariantSelectionModal(productId, 'rent');
             };
         }
 
-        function showRentalModal(productId) {
+        function showRentalModal(productId, partialCartItem) {
             const product = allProducts.find(p => p.id === productId);
             if (!product) return;
 
@@ -704,7 +927,7 @@
             const modalContent = document.getElementById('modal-content');
             
             let rentalDays = 1;
-            const rentPrice = parseFloat(product.rentPrice) || 0;
+            const rentPrice = parseFloat(partialCartItem.rentPrice) || 0;
             const securityDeposit = parseFloat(product.securityDeposit) || 0;
             
             const updateTotal = () => {
@@ -744,7 +967,7 @@
                     <button id="confirm-rent-btn" class="w-full bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700">Confirm & Add to Cart</button>
                 </div>
             `;
-            modalContainer.classList.remove('hidden');
+            // Do not remove hidden from modal container here, let the calling function handle it.
             
             const daysInput = document.getElementById('rental-days');
             
@@ -774,11 +997,11 @@
             document.getElementById('confirm-rent-btn').onclick = () => {
                 const totalRent = rentPrice * rentalDays;
                 const cartItem = {
-                    ...product,
-                    cartItemType: 'rent',
+                    ...partialCartItem,
                     rentalDays: rentalDays,
                     rentalTotal: totalRent,
-                    price: totalRent + securityDeposit // for total calculation in cart
+                    price: totalRent + securityDeposit, // for total calculation in cart
+                    securityDeposit: securityDeposit
                 };
                 cart.push(cartItem);
                 localStorage.setItem('marketplaceCart', JSON.stringify(cart));
@@ -790,20 +1013,15 @@
             updateTotal(); // Initial calculation
         }
 
-        function addToCart(productId, forceType = null) {
+        function addToCart(productId) {
             const product = allProducts.find(p => p.id === productId);
             if (!product) return;
 
-            const type = forceType || product.listingType;
-
-            if (type === 'sale') {
-                cart.push({ ...product, cartItemType: 'sale' });
-                localStorage.setItem('marketplaceCart', JSON.stringify(cart));
-                updateCartBadge();
-                showToast(`${product.title} added to cart!`);
-            } else if (type === 'rent') {
-                showRentalModal(productId);
-            } else if (type === 'both') {
+            if (product.listingType === 'sale') {
+                showVariantSelectionModal(productId, 'sale');
+            } else if (product.listingType === 'rent') {
+                showVariantSelectionModal(productId, 'rent');
+            } else if (product.listingType === 'both') {
                 showBuyOrRentModal(productId);
             }
         }
@@ -817,65 +1035,44 @@
                 return;
             }
 
-            let total = 0;
-            const cartItemsHTML = cart.map((p, index) => {
-                let itemHTML = '';
-                if (p.cartItemType === 'rent') {
-                    const itemTotal = p.rentalTotal + (p.securityDeposit || 0);
-                    total += itemTotal;
-                    itemHTML = `
-                        <div>
-                            <p class="font-semibold">${p.title} (Rent)</p>
-                            <p class="text-sm text-gray-600">${p.rentalDays} day(s) @ ₹${p.rentPrice}/day = ₹${p.rentalTotal.toFixed(2)}</p>
-                            <p class="text-sm text-gray-600">Security Deposit: ₹${(p.securityDeposit || 0).toFixed(2)}</p>
-                            <p class="text-sm font-bold">Item Total: ₹${itemTotal.toFixed(2)}</p>
-                        </div>
-                    `;
-                } else { // 'sale'
-                    const itemTotal = parseFloat(p.price) || 0;
-                    total += itemTotal;
-                    itemHTML = `
-                        <div>
-                            <p class="font-semibold">${p.title} (Sale)</p>
-                            <p class="text-sm text-gray-600">Price: ₹${itemTotal.toFixed(2)}</p>
-                        </div>
-                    `;
-                }
-                return `
-                    <div class="flex justify-between items-center">
-                        ${itemHTML}
-                        <button onclick="removeFromCart(${index})" class="text-red-500 text-xs font-semibold">Remove</button>
-                    </div>
-                `;
-            }).join('');
-
-
             modalContent.innerHTML = `
                 <div class="flex flex-col">
                     <div class="p-4 border-b flex justify-between items-center">
                         <h3 class="font-bold text-lg">Your Cart</h3>
                         <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-2xl">&times;</button>
                     </div>
-                    <div class="p-4 space-y-3 overflow-y-auto max-h-96">
-                        ${cartItemsHTML}
+                    <div id="cart-items-list" class="p-4 space-y-3 overflow-y-auto max-h-96">
+                        <!-- Items will be rendered by updateCartTotals -->
                     </div>
-                    <div class="p-4 border-t">
-                        <div class="flex justify-between font-bold text-xl mb-4">
-                            <span>Grand Total</span>
-                            <span>₹${total.toFixed(2)}</span>
+                    <div class="p-4 border-t space-y-2">
+                        <div id="promo-area">
+                            <label for="promo-code-input" class="text-sm font-medium">Promo Code</label>
+                            <div class="flex gap-2 mt-1">
+                                <input type="text" id="promo-code-input" class="w-full border rounded-md px-3 py-1" placeholder="Enter code">
+                                <button id="apply-promo-btn" class="bg-gray-600 text-white font-semibold px-4 rounded-md text-sm">Apply</button>
+                            </div>
                         </div>
-                        <button onclick="placeOrder()" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700">Place Order</button>
+                        <div id="applied-promo-area" class="hidden"></div>
+                    </div>
+                    <div class="p-4 border-t space-y-1">
+                        <div class="flex justify-between"><span>Subtotal</span><span id="cart-subtotal">₹0.00</span></div>
+                        <div id="cart-discount-row" class="flex justify-between text-red-600 hidden"><span>Discount</span><span id="cart-discount">- ₹0.00</span></div>
+                        <div class="flex justify-between font-bold text-xl"><span>Grand Total</span><span id="cart-grand-total">₹0.00</span></div>
+                        <button onclick="placeOrder()" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 mt-2">Place Order</button>
                     </div>
                 </div>
             `;
             modalContainer.classList.remove('hidden');
+            document.getElementById('apply-promo-btn').addEventListener('click', applyPromoCode);
+            updateCartTotals();
         }
         
         function removeFromCart(index) {
             cart.splice(index, 1);
             localStorage.setItem('marketplaceCart', JSON.stringify(cart));
             updateCartBadge();
-            renderCartModal();
+            appliedPromo = null; // Reset promo when cart changes
+            updateCartTotals();
         }
 
         function showOrderConfirmation() {
@@ -898,17 +1095,62 @@
 
         async function placeOrder() {
             if (cart.length === 0) return;
-            
+
+            const subtotal = cart.reduce((sum, p) => {
+                if (p.cartItemType === 'rent') return sum + p.rentalTotal + (p.securityDeposit || 0);
+                return sum + ((parseFloat(p.price) || 0) * p.quantity);
+            }, 0);
+
+            const discountableSubtotal = cart.reduce((sum, p) => {
+                if (p.cartItemType === 'rent') return sum + p.rentalTotal; // Exclude security deposit
+                return sum + ((parseFloat(p.price) || 0) * p.quantity);
+            }, 0);
+
+            let totalDiscount = 0;
+            if (appliedPromo) {
+                if (appliedPromo.discountType === 'percentage') {
+                    totalDiscount = discountableSubtotal * (appliedPromo.discountValue / 100);
+                } else {
+                    totalDiscount = appliedPromo.discountValue;
+                }
+                totalDiscount = Math.min(totalDiscount, discountableSubtotal);
+            }
+
             for (const product of cart) {
+                const itemSubtotal = product.cartItemType === 'rent' ? product.rentalTotal + (product.securityDeposit || 0) : (parseFloat(product.price) || 0) * product.quantity;
+                const itemDiscountableAmount = product.cartItemType === 'rent' ? product.rentalTotal : itemSubtotal;
+                
+                const proportionalDiscount = discountableSubtotal > 0 ? (itemDiscountableAmount / discountableSubtotal) * totalDiscount : 0;
+                const finalItemPrice = itemSubtotal - proportionalDiscount;
+                
+                const defaultSaleComm = marketplaceSettings.defaultSaleCommission || 10;
+                const defaultRentComm = marketplaceSettings.defaultRentCommission || 15;
+                const saleComm = product.saleCommissionPercentage ?? defaultSaleComm;
+                const rentComm = product.rentCommissionPercentage ?? defaultRentComm;
+
+                let commission = 0;
+                if (product.cartItemType === 'sale') {
+                    const discountedSalePrice = itemDiscountableAmount - proportionalDiscount;
+                    commission = discountedSalePrice * (saleComm / 100);
+                } else if (product.cartItemType === 'rent') {
+                    const discountedRentPart = itemDiscountableAmount - proportionalDiscount;
+                    commission = discountedRentPart * (rentComm / 100);
+                }
+                
                 const transaction = {
                     id: db.ref('transactions').push().key,
                     productId: product.id,
                     buyerMobile: currentUser.mobile,
                     sellerMobile: product.sellerMobile,
-                    amountPaid: product.cartItemType === 'rent' ? product.rentalTotal + (product.securityDeposit || 0) : product.price,
-                    commission: (parseFloat(product.price) || 0) * 0.10, // Commission based on sale price regardless of type
+                    amountPaid: finalItemPrice,
+                    promoCode: appliedPromo ? appliedPromo.code : null,
+                    discountApplied: proportionalDiscount,
+                    commission: commission,
                     timestamp: firebase.database.ServerValue.TIMESTAMP,
-                    type: product.cartItemType // 'sale' or 'rent'
+                    type: product.cartItemType,
+                    selectedColor: product.selectedColor || null,
+                    selectedSize: product.selectedSize || null,
+                    quantity: product.quantity || null,
                 };
                  if (product.cartItemType === 'rent') {
                     transaction.rentalDays = product.rentalDays;
@@ -920,9 +1162,15 @@
                 
                 await db.ref('transactions/' + transaction.id).set(transaction);
                 
-                // If it's a sale, mark the product as sold.
+                // If it's a sale, decrease stock
                 if (product.cartItemType === 'sale') {
-                    await db.ref(`marketplaceProducts/${product.id}`).update({ status: 'sold' });
+                    const productRef = db.ref(`marketplaceProducts/${product.id}`);
+                    const snap = await productRef.once('value');
+                    const currentProduct = snap.val();
+                    if (currentProduct && currentProduct.inventory && currentProduct.inventory[product.selectedSize]) {
+                        const newStock = currentProduct.inventory[product.selectedSize].stock - product.quantity;
+                        await productRef.child('inventory').child(product.selectedSize).update({ stock: newStock });
+                    }
                 }
                 
                 // Notify admin
@@ -937,6 +1185,7 @@
             }
             
             cart = [];
+            appliedPromo = null;
             localStorage.removeItem('marketplaceCart');
             updateCartBadge();
             showOrderConfirmation();
@@ -1009,6 +1258,255 @@
             return `${seconds}s`;
         }
 
+        function showVariantSelectionModal(productId, type) {
+            const product = allProducts.find(p => p.id === productId);
+            if (!product) return;
+
+            const modalContainer = document.getElementById('modal-container');
+            const modalContent = document.getElementById('modal-content');
+            
+            const hasComplexVariants = product.inventory && Object.keys(product.inventory).length > 0 && typeof Object.values(product.inventory)[0] === 'object';
+
+            const colorsHtml = (product.colors && product.colors.length > 0)
+                ? `<div class="mt-4"><h4 class="font-semibold">Color</h4><div class="flex flex-wrap gap-2 mt-2">${product.colors.map((c, i) => `
+                    <label class="flex items-center gap-1 cursor-pointer p-2 border rounded-md has-[:checked]:bg-indigo-100 has-[:checked]:border-indigo-500">
+                        <input type="radio" name="color-select" value="${c}" ${i === 0 ? 'checked' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500"> ${c}
+                    </label>`).join('')}</div></div>`
+                : '';
+            
+            const sizes = hasComplexVariants 
+                ? Object.keys(product.inventory).filter(size => product.inventory[size].stock > 0) 
+                : (product.inventory ? Object.keys(product.inventory).filter(size => product.inventory[size] > 0) : []);
+
+            const sizesHtml = (sizes.length > 0)
+                ? `<div class="mt-4"><h4 class="font-semibold">Size</h4><div class="flex flex-wrap gap-2 mt-2">${sizes.map((s, i) => {
+                    const stock = hasComplexVariants ? product.inventory[s].stock : product.inventory[s];
+                    return `<label class="flex items-center gap-1 cursor-pointer p-2 border rounded-md has-[:checked]:bg-indigo-100 has-[:checked]:border-indigo-500">
+                        <input type="radio" name="size-select" value="${s}" ${i === 0 ? 'checked' : ''} data-stock="${stock}" class="w-4 h-4 text-indigo-600 focus:ring-indigo-500"> ${s}
+                    </label>`;
+                }).join('')}</div></div>`
+                : '';
+
+            const quantityHtml = (type === 'sale')
+                ? `<div class="mt-4"><h4 class="font-semibold">Quantity</h4><input type="number" id="quantity-select" value="1" min="1" class="mt-2 border rounded-md p-2 w-20"></div>`
+                : '';
+            
+            const priceDisplayHtml = `<div id="variant-price-display" class="mt-4 text-xl font-bold text-indigo-600"></div>`;
+
+            modalContent.innerHTML = `
+                <div class="p-6">
+                    <div class="flex justify-between items-start">
+                        <h3 class="font-bold text-lg">${product.title} (${type === 'sale' ? 'Sale' : 'Rent'})</h3>
+                        <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-2xl">&times;</button>
+                    </div>
+                    ${colorsHtml}
+                    ${sizesHtml}
+                    ${priceDisplayHtml}
+                    ${quantityHtml}
+                    <div class="mt-6 flex justify-end">
+                        <button id="confirm-add-to-cart-btn" class="bg-indigo-600 text-white font-semibold py-2 px-6 rounded-lg">Add to Cart</button>
+                    </div>
+                </div>
+            `;
+
+            modalContainer.classList.remove('hidden');
+
+            const confirmBtn = document.getElementById('confirm-add-to-cart-btn');
+
+            const updatePriceDisplay = () => {
+                const selectedSize = document.querySelector('input[name="size-select"]:checked')?.value;
+                const priceDisplay = document.getElementById('variant-price-display');
+                if (!priceDisplay) return;
+
+                let priceText = '';
+                if (hasComplexVariants && selectedSize && product.inventory[selectedSize]) {
+                    const variant = product.inventory[selectedSize];
+                    if (type === 'sale' && variant.price) {
+                        priceText = `Price: ₹${variant.price}`;
+                    } else if (type === 'rent' && variant.rentPrice) {
+                        priceText = `Rent: ₹${variant.rentPrice}/day`;
+                    }
+                } else { // Fallback to main price
+                     if (type === 'sale' && product.price) {
+                        priceText = `Price: ₹${product.price}`;
+                    } else if (type === 'rent' && product.rentPrice) {
+                        priceText = `Rent: ₹${product.rentPrice}/day`;
+                    }
+                }
+                priceDisplay.textContent = priceText;
+            };
+
+            document.querySelectorAll('input[name="size-select"]').forEach(radio => {
+                radio.addEventListener('change', updatePriceDisplay);
+            });
+            updatePriceDisplay(); // Initial call
+
+            confirmBtn.addEventListener('click', () => {
+                const selectedColor = document.querySelector('input[name="color-select"]:checked')?.value;
+                const selectedSize = document.querySelector('input[name="size-select"]:checked')?.value;
+                
+                if (sizes.length > 0 && !selectedSize) {
+                    showToast("Please select a size.");
+                    return;
+                }
+                if (product.colors && product.colors.length > 0 && !selectedColor) {
+                    showToast("Please select a color.");
+                    return;
+                }
+
+                const cartItem = { ...product, cartItemType: type, selectedColor, selectedSize };
+                
+                if (hasComplexVariants && selectedSize && product.inventory[selectedSize]) {
+                    const variant = product.inventory[selectedSize];
+                    if (type === 'sale') {
+                        cartItem.price = variant.price || product.price; // fallback
+                    } else if (type === 'rent') {
+                        cartItem.rentPrice = variant.rentPrice || product.rentPrice; // fallback
+                    }
+                } else {
+                    if (type === 'sale') cartItem.price = product.price;
+                    if (type === 'rent') cartItem.rentPrice = product.rentPrice;
+                }
+
+                if (type === 'sale') {
+                    const quantity = parseInt(document.getElementById('quantity-select').value, 10);
+                    const stock = parseInt(document.querySelector('input[name="size-select"]:checked')?.dataset.stock, 10);
+                    if (!isNaN(stock) && quantity > stock) {
+                        showToast(`Only ${stock} items available in size ${selectedSize}.`);
+                        return;
+                    }
+                    cartItem.quantity = quantity;
+                    
+                    cart.push(cartItem);
+                    localStorage.setItem('marketplaceCart', JSON.stringify(cart));
+                    updateCartBadge();
+                    showToast(`${product.title} added to cart!`);
+                    modalContainer.classList.add('hidden');
+                } else if (type === 'rent') {
+                    showRentalModal(productId, cartItem);
+                }
+            });
+            
+            // Logic to update quantity max based on size selection
+            if (type === 'sale') {
+                const quantityInput = document.getElementById('quantity-select');
+                const updateMaxStock = () => {
+                    const selectedSizeRadio = document.querySelector('input[name="size-select"]:checked');
+                    if (selectedSizeRadio) {
+                         const stock = selectedSizeRadio.dataset.stock;
+                         quantityInput.max = stock;
+                         if (parseInt(quantityInput.value, 10) > stock) {
+                             quantityInput.value = stock;
+                         }
+                    }
+                };
+                
+                document.querySelectorAll('input[name="size-select"]').forEach(radio => {
+                    radio.addEventListener('change', updateMaxStock);
+                });
+                
+                updateMaxStock(); // Set initial max
+            }
+        }
+        
+        // --- PROMO CODE LOGIC ---
+        function updateCartTotals() {
+            const itemsListDiv = document.getElementById('cart-items-list');
+            const subtotalEl = document.getElementById('cart-subtotal');
+            const discountRowEl = document.getElementById('cart-discount-row');
+            const discountEl = document.getElementById('cart-discount');
+            const grandTotalEl = document.getElementById('cart-grand-total');
+
+            let subtotal = cart.reduce((sum, p) => {
+                if (p.cartItemType === 'rent') return sum + p.rentalTotal + (p.securityDeposit || 0);
+                return sum + ((parseFloat(p.price) || 0) * (p.quantity || 1));
+            }, 0);
+            
+            let discountableSubtotal = cart.reduce((sum, p) => {
+                if (p.cartItemType === 'rent') return sum + p.rentalTotal; // Exclude security deposit
+                return sum + ((parseFloat(p.price) || 0) * (p.quantity || 1));
+            }, 0);
+
+            let discount = 0;
+            if (appliedPromo) {
+                if (appliedPromo.discountType === 'percentage') {
+                    discount = discountableSubtotal * (appliedPromo.discountValue / 100);
+                } else {
+                    discount = appliedPromo.discountValue;
+                }
+                discount = Math.min(discount, discountableSubtotal); // Discount cannot exceed subtotal
+            }
+
+            // Render cart items
+             itemsListDiv.innerHTML = cart.map((p, index) => {
+                let itemHTML = '';
+                 const itemSubtotal = p.cartItemType === 'rent' ? p.rentalTotal + (p.securityDeposit || 0) : (parseFloat(p.price) || 0) * (p.quantity || 1);
+
+                if (p.cartItemType === 'rent') {
+                    itemHTML = `<div>
+                            <p class="font-semibold">${p.title} (Rent)</p>
+                            <p class="text-sm text-gray-600">${p.rentalDays} day(s) @ ₹${p.rentPrice}/day + ₹${(p.securityDeposit || 0).toFixed(2)} deposit</p>
+                            <p class="text-sm font-bold">Item Total: ₹${itemSubtotal.toFixed(2)}</p>
+                        </div>`;
+                } else { // 'sale'
+                    itemHTML = `<div>
+                            <p class="font-semibold">${p.title} (Sale)</p>
+                            <p class="text-sm text-gray-600">${p.quantity} x ₹${p.price.toFixed(2)} = ₹${itemSubtotal.toFixed(2)}</p>
+                        </div>`;
+                }
+                return `<div class="flex justify-between items-center border-b pb-2">${itemHTML}<button onclick="removeFromCart(${index})" class="text-red-500 text-xs font-semibold">Remove</button></div>`;
+            }).join('');
+
+            subtotalEl.textContent = `₹${subtotal.toFixed(2)}`;
+            discountRowEl.classList.toggle('hidden', discount <= 0);
+            discountEl.textContent = `- ₹${discount.toFixed(2)}`;
+            grandTotalEl.textContent = `₹${(subtotal - discount).toFixed(2)}`;
+        }
+
+        async function applyPromoCode() {
+            const input = document.getElementById('promo-code-input');
+            const code = input.value.trim().toUpperCase();
+            if (!code) return;
+
+            const promoCodes = marketplaceSettings.promoCodes || {};
+            const promo = Object.values(promoCodes).find(p => p.code === code);
+            
+            const discountableSubtotal = cart.reduce((sum, p) => {
+                if (p.cartItemType === 'rent') return sum + p.rentalTotal;
+                return sum + ((parseFloat(p.price) || 0) * (p.quantity || 1));
+            }, 0);
+
+            if (!promo || !promo.isActive) {
+                showToast("Invalid or expired promo code.");
+                appliedPromo = null;
+            } else if (promo.minOrderValue && discountableSubtotal < promo.minOrderValue) {
+                showToast(`This code requires a minimum order of ₹${promo.minOrderValue}.`);
+                appliedPromo = null;
+            } else {
+                appliedPromo = promo;
+                showToast(`Promo code "${promo.code}" applied!`);
+                const promoArea = document.getElementById('promo-area');
+                const appliedPromoArea = document.getElementById('applied-promo-area');
+                promoArea.classList.add('hidden');
+                appliedPromoArea.classList.remove('hidden');
+                appliedPromoArea.innerHTML = `
+                    <div class="flex justify-between items-center bg-green-50 text-green-700 p-2 rounded-md">
+                        <p class="text-sm font-semibold">Code Applied: <strong>${promo.code}</strong></p>
+                        <button id="remove-promo-btn" class="text-xs font-bold">&times; Remove</button>
+                    </div>
+                `;
+                document.getElementById('remove-promo-btn').addEventListener('click', () => {
+                    appliedPromo = null;
+                    promoArea.classList.remove('hidden');
+                    appliedPromoArea.classList.add('hidden');
+                    input.value = '';
+                    updateCartTotals();
+                    showToast("Promo code removed.");
+                });
+            }
+            updateCartTotals();
+        }
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
             try {
@@ -1066,8 +1564,17 @@
             
             // Chat FAB
             document.getElementById('chat-fab').addEventListener('click', () => openChat());
+
+            // Add listener to the form's parent to handle dynamic elements
+            const marketplaceContent = document.getElementById('marketplace-content');
+            if (marketplaceContent) {
+                 marketplaceContent.addEventListener('submit', function(e) {
+                    if (e.target && e.target.id === 'list-item-form') {
+                        handleListSubmit(e);
+                    }
+                });
+            }
         });
     </script>
-
 
 <script src="./script.js"></script></body></html>
