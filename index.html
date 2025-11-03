@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="Update version "><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="With voice msg and count down "><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
+
 
 
 
@@ -20,6 +21,7 @@
             background-color: #f3f4f6;
         }
         .tab-btn.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff;}
+        .list-form-tab-btn.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff;}
         .product-card { transition: transform 0.2s, box-shadow 0.2s; }
         .product-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
         .modal { background-color: rgba(0,0,0,0.5); }
@@ -150,7 +152,6 @@
         let cart = [];
         let appliedPromo = null;
         let rentalCountdownInterval = null;
-        let activeFilters = { color: 'all', size: 'all' };
 
         const ADMIN_MOBILE = "0000000000"; // Placeholder for Admin's mobile number
         const ADMIN_WHATSAPP_NUMBER = "917696272780";
@@ -303,19 +304,13 @@
                 const product = products[t.productId] || { title: 'Unknown Item' };
                 const isBuyer = t.buyerMobile === currentUser.mobile;
                 
-                let variantInfo = '';
-                if (t.selectedSize || t.selectedColor) {
-                    variantInfo = ` (${[t.selectedSize, t.selectedColor].filter(Boolean).join(', ')})`;
-                }
-                if (t.quantity) {
-                    variantInfo += ` x ${t.quantity}`;
-                }
+                let quantityInfo = t.quantity ? ` x ${t.quantity}` : '';
 
                 if (isBuyer) {
                     if (t.type === 'sale') {
-                        ledgerLines.push({ date: t.timestamp, description: `Purchased: ${product.title}${variantInfo}`, debit: t.amountPaid, credit: 0 });
+                        ledgerLines.push({ date: t.timestamp, description: `Purchased: ${product.title}${quantityInfo}`, debit: t.amountPaid, credit: 0 });
                     } else if (t.type === 'rent') {
-                        ledgerLines.push({ date: t.timestamp, description: `Rent Fee: ${product.title}${variantInfo}`, debit: t.rentalTotal, credit: 0 });
+                        ledgerLines.push({ date: t.timestamp, description: `Rent Fee: ${product.title}`, debit: t.rentalTotal, credit: 0 });
                         if (t.securityDeposit > 0) {
                             ledgerLines.push({ date: t.timestamp, description: `Security Deposit Paid`, debit: t.securityDeposit, credit: 0, isDeposit: true });
                         }
@@ -326,10 +321,10 @@
                 } else { // Is Seller
                     if (t.type === 'sale') {
                         const netReceived = (t.amountPaid || 0) - (t.commission || 0);
-                        ledgerLines.push({ date: t.timestamp, description: `Sold: ${product.title}${variantInfo}`, debit: 0, credit: netReceived });
+                        ledgerLines.push({ date: t.timestamp, description: `Sold: ${product.title}${quantityInfo}`, debit: 0, credit: netReceived });
                     } else if (t.type === 'rent') {
                         const netRentReceived = (t.rentalTotal || 0) - (t.commission || 0);
-                        ledgerLines.push({ date: t.timestamp, description: `Rent Received: ${product.title}${variantInfo}`, debit: 0, credit: netRentReceived });
+                        ledgerLines.push({ date: t.timestamp, description: `Rent Received: ${product.title}`, debit: 0, credit: netRentReceived });
                         
                         if (t.securityDeposit > 0) {
                             ledgerLines.push({ date: t.timestamp, description: `Security Deposit Held from Buyer`, debit: 0, credit: t.securityDeposit, isDeposit: true });
@@ -390,7 +385,6 @@
                     <button data-subtab="browse" class="marketplace-tab-btn active p-3 font-semibold text-sm">Browse</button>
                     <button data-subtab="list" class="marketplace-tab-btn p-3 font-semibold text-sm">List an Item</button>
                 </div>
-                <div id="filters-container" class="my-4 bg-white p-4 rounded-lg shadow-sm flex flex-wrap gap-4 items-center"></div>
                 <div id="marketplace-content" class="mt-4"></div>
              `;
              document.querySelectorAll('.marketplace-tab-btn').forEach(btn => {
@@ -403,46 +397,6 @@
              });
              renderProductGrid();
         }
-        
-        function renderFilters(products) {
-            const filtersContainer = document.getElementById('filters-container');
-            if (!filtersContainer) return;
-
-            const allColors = [...new Set(products.flatMap(p => p.colors || []))];
-            const allSizes = [...new Set(products.flatMap(p => Object.keys(p.inventory || {})))];
-
-            filtersContainer.innerHTML = `
-                <span class="font-semibold">Filter by:</span>
-                <div>
-                    <label for="color-filter" class="text-sm font-medium mr-2">Color:</label>
-                    <select id="color-filter" class="border rounded-md p-2 text-sm">
-                        <option value="all">All Colors</option>
-                        ${allColors.map(c => `<option value="${c}" ${activeFilters.color === c ? 'selected' : ''}>${c}</option>`).join('')}
-                    </select>
-                </div>
-                <div>
-                    <label for="size-filter" class="text-sm font-medium mr-2">Size:</label>
-                    <select id="size-filter" class="border rounded-md p-2 text-sm">
-                        <option value="all">All Sizes</option>
-                        ${allSizes.map(s => `<option value="${s}" ${activeFilters.size === s ? 'selected' : ''}>${s}</option>`).join('')}
-                    </select>
-                </div>
-                <button id="clear-filters-btn" class="text-sm text-indigo-600 hover:underline">Clear Filters</button>
-            `;
-
-            document.getElementById('color-filter').addEventListener('change', (e) => {
-                activeFilters.color = e.target.value;
-                renderProductGrid();
-            });
-            document.getElementById('size-filter').addEventListener('change', (e) => {
-                activeFilters.size = e.target.value;
-                renderProductGrid();
-            });
-            document.getElementById('clear-filters-btn').addEventListener('click', () => {
-                activeFilters = { color: 'all', size: 'all' };
-                renderProductGrid();
-            });
-        }
 
         async function renderProductGrid() {
             const content = document.getElementById('marketplace-content');
@@ -452,17 +406,8 @@
             const productsData = productsSnap.val() || {};
             allProducts = Object.values(productsData).filter(p => p.status === 'approved' || p.status === 'sold' || p.sellerMobile === currentUser.mobile);
             
-            renderFilters(allProducts);
-
-            const filteredProducts = allProducts.filter(p => {
-                if (p.status !== 'approved' && p.sellerMobile !== currentUser.mobile) return false;
-                const colorMatch = activeFilters.color === 'all' || (p.colors && p.colors.includes(activeFilters.color));
-                const sizeMatch = activeFilters.size === 'all' || (p.inventory && Object.keys(p.inventory).includes(activeFilters.size));
-                return colorMatch && sizeMatch;
-            });
-
-            if(filteredProducts.length === 0) {
-                content.innerHTML = `<p>No items match your filters in the marketplace yet.</p>`;
+            if(allProducts.length === 0) {
+                content.innerHTML = `<p>No items in the marketplace yet.</p>`;
                 return;
             }
             
@@ -481,42 +426,23 @@
 
             content.innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    ${filteredProducts.map(p => {
+                    ${allProducts.map(p => {
                         const imageUrl = getGoogleDriveImageUrl(p.imageUrl);
                         const isRented = activeRentals.has(p.id);
-                        const isSold = p.status === 'sold';
+                        const isSold = p.status === 'sold' || (p.stock !== undefined && p.stock <= 0);
                         
                         let priceHTML = '';
-                        const hasVariants = p.inventory && Object.keys(p.inventory).length > 0 && typeof Object.values(p.inventory)[0] === 'object';
-
-                        if (hasVariants) {
-                            const prices = Object.values(p.inventory).map(v => v.price).filter(p => p !== null && p > 0);
-                            const rentPrices = Object.values(p.inventory).map(v => v.rentPrice).filter(p => p !== null && p > 0);
-                            const minPrice = prices.length > 0 ? Math.min(...prices) : null;
-                            const minRentPrice = rentPrices.length > 0 ? Math.min(...rentPrices) : null;
-
-                            if ((p.listingType === 'sale' || p.listingType === 'both') && minPrice !== null) {
-                                priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy from ₹${minPrice}</p>`;
-                            }
-                            if ((p.listingType === 'rent' || p.listingType === 'both') && minRentPrice !== null) {
-                                priceHTML += `<p class="text-md text-gray-700">Rent from ₹${minRentPrice}/day</p>`;
-                            }
+                        if ((p.listingType === 'sale' || p.listingType === 'both') && p.price) {
+                            priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy for ₹${p.price}</p>`;
+                        }
+                        if ((p.listingType === 'rent' || p.listingType === 'both') && p.rentPrice) {
+                            priceHTML += `<p class="text-md text-gray-700">Rent for ₹${p.rentPrice}/day</p>`;
                         }
 
-                        // Fallback for simple products or if variant prices are missing
-                        if (!priceHTML) {
-                            if ((p.listingType === 'sale' || p.listingType === 'both') && p.price) {
-                                priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy at ₹${p.price}</p>`;
-                            }
-                            if ((p.listingType === 'rent' || p.listingType === 'both') && p.rentPrice) {
-                                priceHTML += `<p class="text-md text-gray-700">Rent at ₹${p.rentPrice}/day</p>`;
-                            }
-                        }
-
-                        let rentButtonHTML = '';
+                        let rentStatusHTML = '';
                         if (p.listingType === 'rent' || p.listingType === 'both') {
                              if(isRented) {
-                                rentButtonHTML = `<div class="w-full text-center text-amber-600 font-bold p-2 bg-amber-100 rounded-md">Currently Rented</div>`;
+                                rentStatusHTML = `<div class="w-full text-center text-amber-600 font-bold p-2 bg-amber-100 rounded-md">Currently Rented</div>`;
                             }
                         }
 
@@ -530,10 +456,7 @@
                             `;
                         } else {
                             actionButtons = `
-                                <button onclick="contactAdminForProduct('${p.title}')" class="w-1/2 bg-gray-200 text-gray-800 py-2 rounded-md hover:bg-gray-300 font-semibold text-sm flex items-center justify-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654z M12 5.583c.365 0 .703.111 1.002.316l.11.063c.27.185.27.516.035.797l-2.455 4.095c-.236.394-.099.811.306 1.018l.112.054c.48.243.987.362 1.553.362.593 0 1.192-.128 1.776-.39l.114-.05c.345-.165.732.14.595.53l-1.264 3.447c-.137.39-.56.632-.99.533l-.116-.023c-1.003-.19-1.958-.613-2.813-1.258l-.092-.063c-.855-.645-1.523-1.476-1.95-2.435l-.048-.113c-.237-.563.264-1.08.872-1.042l.115.006c.48.023.935.165 1.348.42l.09.048c.305.165.65.048.797-.264l1.18-2.455c.148-.318.048-.714-.249-.888l-.092-.048c-.287-.156-.593-.243-.913-.243-.332 0-.655.086-.948.243l-.09.056c-.33.208-.768.035-.872-.345l-.27-1.13c-.104-.428.165-.833.595-.913l.116-.023c.332-.063.67-.094 1.018-.094z"/></svg>
-                                    Contact
-                                </button>
+                                <button onclick="requestToTry('${p.id}', '${p.title}')" class="w-1/2 bg-gray-200 text-gray-800 py-2 rounded-md hover:bg-gray-300 font-semibold text-sm">Request to Try</button>
                                 <button onclick="addToCart('${p.id}')" class="w-1/2 bg-indigo-500 text-white py-2 rounded-md hover:bg-indigo-600 font-semibold text-sm ${isRented ? 'opacity-50 cursor-not-allowed' : ''}" ${isRented ? 'disabled' : ''}>Add to Cart</button>
                             `;
                         }
@@ -545,7 +468,7 @@
                                 <h3 class="font-bold text-lg text-gray-800">${p.title}</h3>
                                 <p class="text-sm text-gray-600 mt-1 flex-grow">${p.description}</p>
                                 <div class="mt-4">${priceHTML}</div>
-                                <div class="mt-2">${rentButtonHTML}</div>
+                                <div class="mt-2">${rentStatusHTML}</div>
                                 <div class="mt-auto pt-4 flex gap-2">${actionButtons}</div>
                             </div>
                         </div>
@@ -556,176 +479,152 @@
 
         function renderListItemForm() {
             const content = document.getElementById('marketplace-content');
-            content.innerHTML = `
-                <form id="list-item-form" class="bg-white p-6 rounded-lg shadow-sm space-y-4 max-w-lg mx-auto">
-                    <h3 class="text-xl font-bold">List a New Item</h3>
-                     <div class="bg-blue-50 border-l-4 border-blue-400 text-blue-700 p-4 rounded-md" role="alert">
-                        <p class="font-bold">Image Upload Instructions</p>
-                        <p>After submitting this form, please send the product photo via WhatsApp to the admin. The image will be added to your listing shortly.</p>
+            
+            const commonFields = `
+                <div class="bg-blue-50 border-l-4 border-blue-400 text-blue-700 p-4 rounded-md" role="alert">
+                    <p class="font-bold">Image Upload Instructions</p>
+                    <p>After submitting this form, please send the product photo via WhatsApp to the admin. The image will be added to your listing shortly.</p>
+                </div>
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700">Title</label>
+                    <input type="text" id="title" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required>
+                </div>
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea id="description" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required></textarea>
+                </div>
+            `;
+            const saleFields = `
+                <div>
+                    <label for="price" class="block text-sm font-medium text-gray-700">Sale Price (₹)</label>
+                    <input type="number" id="price" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required>
+                </div>
+                <div>
+                    <label for="stock" class="block text-sm font-medium text-gray-700">Stock Quantity</label>
+                    <input type="number" id="stock" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" min="0" value="1">
+                </div>
+            `;
+            const rentFields = `
+                <div class="space-y-4">
+                    <div>
+                        <label for="rentPrice" class="block text-sm font-medium text-gray-700">Rent Price per day (₹)</label>
+                        <input type="number" id="rentPrice" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required>
                     </div>
                     <div>
-                        <label for="title" class="block text-sm font-medium text-gray-700">Title</label>
-                        <input type="text" id="title" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required>
+                        <label for="securityDeposit" class="block text-sm font-medium text-gray-700">Security Deposit (₹)</label>
+                        <input type="number" id="securityDeposit" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
                     </div>
-                    <div>
-                        <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
-                        <textarea id="description" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required></textarea>
-                    </div>
+                </div>
+            `;
 
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Listing Type</label>
-                        <div class="mt-2 flex gap-4">
-                            <label class="flex items-center"><input type="radio" name="listingType" value="sale" class="mr-2" checked> For Sale</label>
-                            <label class="flex items-center"><input type="radio" name="listingType" value="rent" class="mr-2"> For Rent</label>
-                            <label class="flex items-center"><input type="radio" name="listingType" value="both" class="mr-2"> Both</label>
-                        </div>
-                    </div>
-
-                    <div id="sale-price-div">
-                        <label for="price" class="block text-sm font-medium text-gray-700">Sale Price (₹)</label>
-                        <input type="number" id="price" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
-                    </div>
-
-                    <div id="rent-price-div" class="hidden-form-field space-y-4">
-                        <div>
-                            <label for="rentPrice" class="block text-sm font-medium text-gray-700">Rent Price per day (₹)</label>
-                            <input type="number" id="rentPrice" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
-                        </div>
-                        <div>
-                            <label for="securityDeposit" class="block text-sm font-medium text-gray-700">Security Deposit (₹)</label>
-                            <input type="number" id="securityDeposit" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
-                        </div>
-                    </div>
-                    
-                    <div id="variant-section" class="space-y-4 pt-4 border-t">
-                        <div>
-                            <label for="colors" class="block text-sm font-medium text-gray-700">Available Colors (comma-separated)</label>
-                            <input type="text" id="colors" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="e.g., Red, Blue, Green">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Sizes, Stock & Prices</label>
-                            <p class="text-xs text-gray-500">Add variants if your item has different sizes with different prices. Otherwise, use the main price fields above.</p>
-                            <div id="inventory-container" class="space-y-2 mt-2"></div>
-                            <button type="button" id="add-size-btn" class="mt-2 text-sm text-indigo-600 hover:underline">+ Add Size/Variant</button>
-                        </div>
-                    </div>
-                    
+            const renderSaleForm = () => `
+                <form id="list-sale-form" class="bg-white p-6 rounded-lg shadow-sm space-y-4">
+                    ${commonFields}
+                    ${saleFields}
                     <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 font-semibold">List Item for Approval</button>
                 </form>
             `;
-            
-            const saleDiv = document.getElementById('sale-price-div');
-            const rentDiv = document.getElementById('rent-price-div');
-            const listingTypeRadios = document.querySelectorAll('input[name="listingType"]');
-            
-            const addSizeBtn = document.getElementById('add-size-btn');
-            const inventoryContainer = document.getElementById('inventory-container');
+            const renderRentForm = () => `
+                <form id="list-rent-form" class="bg-white p-6 rounded-lg shadow-sm space-y-4">
+                    ${commonFields}
+                    ${rentFields}
+                    <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 font-semibold">List Item for Approval</button>
+                </form>
+            `;
+            const renderBothForm = () => `
+                <form id="list-both-form" class="bg-white p-6 rounded-lg shadow-sm space-y-4">
+                    ${commonFields}
+                    <div class="pt-4 border-t"><h4 class="font-semibold mb-2">Sale Details</h4>${saleFields}</div>
+                    <div class="pt-4 border-t"><h4 class="font-semibold mb-2">Rent Details</h4>${rentFields}</div>
+                    <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 font-semibold">List Item for Approval</button>
+                </form>
+            `;
 
-            const addSizeRow = () => {
-                const row = document.createElement('div');
-                row.className = 'grid grid-cols-1 sm:grid-cols-5 gap-2 inventory-row items-center p-2 border rounded-md';
-                row.innerHTML = `
-                    <input type="text" placeholder="Size (e.g., L)" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm size-input">
-                    <input type="number" placeholder="Stock" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm stock-input" min="0">
-                    <input type="number" placeholder="Sale Price (₹)" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm sale-price-input" step="0.01" min="0">
-                    <input type="number" placeholder="Rent Price/day (₹)" class="sm:col-span-1 border border-gray-300 rounded-md p-2 text-sm rent-price-input" step="0.01" min="0">
-                    <button type="button" class="sm:col-span-1 text-red-500 font-bold remove-size-btn justify-self-center">&times;</button>
-                `;
-                inventoryContainer.appendChild(row);
-                row.querySelector('.remove-size-btn').addEventListener('click', () => {
-                    row.remove();
-                    toggleMainPriceInputs();
+            content.innerHTML = `
+                <div class="max-w-lg mx-auto">
+                    <div class="border-b border-gray-200 mb-4">
+                        <nav class="-mb-px flex space-x-4" aria-label="Listing Type">
+                            <button data-form="sale" class="list-form-tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">Sell Only</button>
+                            <button data-form="rent" class="list-form-tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">Rent Only</button>
+                            <button data-form="both" class="list-form-tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">Sell & Rent</button>
+                        </nav>
+                    </div>
+                    <div id="listing-form-container"></div>
+                </div>
+            `;
+
+            const formContainer = document.getElementById('listing-form-container');
+
+            const switchForm = (formType) => {
+                document.querySelectorAll('.list-form-tab-btn').forEach(btn => {
+                    const isActive = btn.dataset.form === formType;
+                    btn.classList.toggle('active', isActive);
+                    btn.classList.toggle('text-gray-500', !isActive);
+                    btn.classList.toggle('border-transparent', !isActive);
                 });
-                toggleMainPriceInputs();
+                if (formType === 'sale') formContainer.innerHTML = renderSaleForm();
+                else if (formType === 'rent') formContainer.innerHTML = renderRentForm();
+                else if (formType === 'both') formContainer.innerHTML = renderBothForm();
             };
 
-            addSizeBtn.addEventListener('click', addSizeRow);
-            
-            listingTypeRadios.forEach(radio => {
-                radio.addEventListener('change', (e) => {
-                    const type = e.target.value;
-                    saleDiv.classList.toggle('hidden-form-field', !(type === 'sale' || type === 'both'));
-                    rentDiv.classList.toggle('hidden-form-field', !(type === 'rent' || type === 'both'));
-                });
+            document.querySelectorAll('.list-form-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => switchForm(btn.dataset.form));
             });
 
-            // Initially call it
-            toggleMainPriceInputs();
+            switchForm('sale'); // Initial render
         }
+
 
         async function handleListSubmit(e) {
             e.preventDefault();
+            const form = e.target;
+            const formId = form.id;
             
-            const listingType = document.querySelector('input[name="listingType"]:checked').value;
-            const price = parseFloat(document.getElementById('price').value) || null;
-            const rentPrice = parseFloat(document.getElementById('rentPrice').value) || null;
-            
-            const inventory = {};
-            let hasVariants = document.querySelectorAll('.inventory-row').length > 0;
-
-            if (hasVariants) {
-                let allRowsValid = true;
-                let hasAnyData = false;
-                document.querySelectorAll('.inventory-row').forEach(row => {
-                    const size = row.querySelector('.size-input').value.trim().toUpperCase();
-                    if (size) {
-                        hasAnyData = true;
-                        const salePrice = parseFloat(row.querySelector('.sale-price-input').value) || null;
-                        const rentPriceVar = parseFloat(row.querySelector('.rent-price-input').value) || null;
-                        
-                        if ((listingType === 'sale' || listingType === 'both') && !salePrice) {
-                           allRowsValid = false;
-                        }
-                        if ((listingType === 'rent' || listingType === 'both') && !rentPriceVar) {
-                           allRowsValid = false;
-                        }
-
-                        inventory[size] = {
-                            stock: parseInt(row.querySelector('.stock-input').value, 10) || 0,
-                            price: salePrice,
-                            rentPrice: rentPriceVar,
-                        };
-                    }
-                });
-                
-                if (!hasAnyData) hasVariants = false; // Treat as simple product if no variant data entered
-
-                if (hasVariants && !allRowsValid) {
-                    showToast("Please provide a price for each variant size based on listing type.");
-                    return;
-                }
-            } 
-            
-            if (!hasVariants) {
-                 if ((listingType === 'sale' || listingType === 'both') && !price) {
-                    showToast("Please provide a sale price.");
-                    return;
-                }
-                if ((listingType === 'rent' || listingType === 'both') && !rentPrice) {
-                    showToast("Please provide a rent price.");
-                    return;
-                }
-            }
-            
-            const colors = document.getElementById('colors').value.split(',').map(c => c.trim()).filter(Boolean);
+            let listingType;
+            if (formId === 'list-sale-form') listingType = 'sale';
+            else if (formId === 'list-rent-form') listingType = 'rent';
+            else if (formId === 'list-both-form') listingType = 'both';
+            else return;
 
             const newProduct = {
                 id: Date.now().toString(),
                 sellerMobile: currentUser.mobile,
                 sellerName: allCustomers.find(c => c.mobile === currentUser.mobile)?.name || `User ${currentUser.mobile.slice(-4)}`,
-                title: document.getElementById('title').value,
-                description: document.getElementById('description').value,
+                title: form.querySelector('#title').value,
+                description: form.querySelector('#description').value,
                 listingType: listingType,
-                price: hasVariants ? null : price,
-                rentPrice: hasVariants ? null : rentPrice,
-                securityDeposit: parseFloat(document.getElementById('securityDeposit').value) || null,
                 status: 'pending_approval',
                 listedDate: new Date().toISOString(),
-                imageUrl: '', // Initially empty
-                colors,
-                inventory: hasVariants ? inventory : {},
+                imageUrl: '',
+                price: null,
+                stock: null,
+                rentPrice: null,
+                securityDeposit: null
             };
 
+            if (listingType === 'sale' || listingType === 'both') {
+                newProduct.price = parseFloat(form.querySelector('#price').value) || null;
+                newProduct.stock = parseInt(form.querySelector('#stock').value, 10) || 0;
+                if (!newProduct.price) {
+                    showToast("Please provide a sale price.");
+                    return;
+                }
+            }
+
+            if (listingType === 'rent' || listingType === 'both') {
+                newProduct.rentPrice = parseFloat(form.querySelector('#rentPrice').value) || null;
+                newProduct.securityDeposit = parseFloat(form.querySelector('#securityDeposit').value) || 0;
+                if (!newProduct.rentPrice) {
+                    showToast("Please provide a rent price.");
+                    return;
+                }
+            }
+            
+            // For rent-only, stock is typically 1 unless specified otherwise.
+            // For simplicity, we'll assume 1 for rent-only items.
+            if (listingType === 'rent' && newProduct.stock === null) {
+                newProduct.stock = 1;
+            }
 
             try {
                 await db.ref('marketplaceProducts/' + newProduct.id).set(newProduct);
@@ -915,42 +814,11 @@
         // --- CART LOGIC ---
         function updateCartBadge() {
             const badge = document.getElementById('cart-badge');
-            const uniqueItems = new Set(cart.map(item => item.id));
-            badge.textContent = uniqueItems.size;
+            badge.textContent = cart.length;
             badge.classList.toggle('hidden', cart.length === 0);
         }
 
-        function showBuyOrRentModal(productId) {
-            const product = allProducts.find(p => p.id === productId);
-            if (!product) return;
-
-            const modalContainer = document.getElementById('modal-container');
-            const modalContent = document.getElementById('modal-content');
-
-            modalContent.innerHTML = `
-                <div class="p-6">
-                    <div class="flex justify-between items-start">
-                        <h3 class="font-bold text-lg">Choose an option for ${product.title}</h3>
-                        <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-2xl">&times;</button>
-                    </div>
-                    <p class="text-sm text-gray-600 my-4">This item is available for both sale and rent.</p>
-                    <div class="flex gap-4">
-                        <button id="buy-option-btn" class="flex-1 bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700">Buy</button>
-                        <button id="rent-option-btn" class="flex-1 bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700">Rent</button>
-                    </div>
-                </div>
-            `;
-            modalContainer.classList.remove('hidden');
-
-            document.getElementById('buy-option-btn').onclick = () => {
-                showVariantSelectionModal(productId, 'sale');
-            };
-            document.getElementById('rent-option-btn').onclick = () => {
-                showVariantSelectionModal(productId, 'rent');
-            };
-        }
-
-        function showRentalModal(productId, partialCartItem) {
+        function showRentalModal(productId) {
             const product = allProducts.find(p => p.id === productId);
             if (!product) return;
 
@@ -958,7 +826,7 @@
             const modalContent = document.getElementById('modal-content');
             
             let rentalDays = 1;
-            const rentPrice = parseFloat(partialCartItem.rentPrice) || 0;
+            const rentPrice = parseFloat(product.rentPrice) || 0;
             const securityDeposit = parseFloat(product.securityDeposit) || 0;
             
             const updateTotal = () => {
@@ -998,7 +866,7 @@
                     <button id="confirm-rent-btn" class="w-full bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700">Confirm & Add to Cart</button>
                 </div>
             `;
-            // Do not remove hidden from modal container here, let the calling function handle it.
+            modalContainer.classList.remove('hidden');
             
             const daysInput = document.getElementById('rental-days');
             
@@ -1028,7 +896,8 @@
             document.getElementById('confirm-rent-btn').onclick = () => {
                 const totalRent = rentPrice * rentalDays;
                 const cartItem = {
-                    ...partialCartItem,
+                    ...product,
+                    cartItemType: 'rent',
                     rentalDays: rentalDays,
                     rentalTotal: totalRent,
                     price: totalRent + securityDeposit, // for total calculation in cart
@@ -1048,12 +917,48 @@
             const product = allProducts.find(p => p.id === productId);
             if (!product) return;
 
-            if (product.listingType === 'sale') {
-                showVariantSelectionModal(productId, 'sale');
+             if (product.stock !== undefined && product.stock <= 0) {
+                showToast("This item is out of stock.");
+                return;
+            }
+
+            if (product.listingType === 'both') {
+                const modalContainer = document.getElementById('modal-container');
+                const modalContent = document.getElementById('modal-content');
+                modalContent.innerHTML = `
+                    <div class="p-6">
+                        <div class="flex justify-between items-start">
+                            <h3 class="font-bold text-lg">Choose an option for ${product.title}</h3>
+                            <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-2xl">&times;</button>
+                        </div>
+                        <p class="text-sm text-gray-600 my-4">How would you like to add this item?</p>
+                        <div class="flex gap-4">
+                            <button id="buy-option-btn" class="flex-1 bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700">Buy (₹${product.price})</button>
+                            <button id="rent-option-btn" class="flex-1 bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700">Rent (₹${product.rentPrice}/day)</button>
+                        </div>
+                    </div>
+                `;
+                modalContainer.classList.remove('hidden');
+
+                document.getElementById('buy-option-btn').onclick = () => {
+                    const cartItem = { ...product, cartItemType: 'sale', quantity: 1 };
+                    cart.push(cartItem);
+                    localStorage.setItem('marketplaceCart', JSON.stringify(cart));
+                    updateCartBadge();
+                    showToast(`${product.title} added to cart for sale.`);
+                    modalContainer.classList.add('hidden');
+                };
+                document.getElementById('rent-option-btn').onclick = () => {
+                    showRentalModal(productId);
+                };
+            } else if (product.listingType === 'sale') {
+                const cartItem = { ...product, cartItemType: 'sale', quantity: 1 };
+                cart.push(cartItem);
+                localStorage.setItem('marketplaceCart', JSON.stringify(cart));
+                updateCartBadge();
+                showToast(`${product.title} added to cart for sale.`);
             } else if (product.listingType === 'rent') {
-                showVariantSelectionModal(productId, 'rent');
-            } else if (product.listingType === 'both') {
-                showBuyOrRentModal(productId);
+                showRentalModal(productId);
             }
         }
 
@@ -1137,14 +1042,21 @@
                 }
             }
 
+            for (const product of cart) {
+                 if (product.cartItemType === 'sale' && product.stock !== undefined && product.stock < product.quantity) {
+                    showToast(`Not enough stock for ${product.title}. Please adjust your cart.`);
+                    return;
+                }
+            }
+
             const subtotal = cart.reduce((sum, p) => {
                 if (p.cartItemType === 'rent') return sum + p.rentalTotal + (p.securityDeposit || 0);
-                return sum + ((parseFloat(p.price) || 0) * p.quantity);
+                return sum + ((parseFloat(p.price) || 0) * (p.quantity || 1));
             }, 0);
-
+            
             const discountableSubtotal = cart.reduce((sum, p) => {
                 if (p.cartItemType === 'rent') return sum + p.rentalTotal; // Exclude security deposit
-                return sum + ((parseFloat(p.price) || 0) * p.quantity);
+                return sum + ((parseFloat(p.price) || 0) * (p.quantity || 1));
             }, 0);
 
             let totalDiscount = 0;
@@ -1158,7 +1070,7 @@
             }
 
             for (const product of cart) {
-                const itemSubtotal = product.cartItemType === 'rent' ? product.rentalTotal + (product.securityDeposit || 0) : (parseFloat(product.price) || 0) * product.quantity;
+                const itemSubtotal = product.cartItemType === 'rent' ? product.rentalTotal + (product.securityDeposit || 0) : (parseFloat(product.price) || 0) * (product.quantity || 1);
                 const itemDiscountableAmount = product.cartItemType === 'rent' ? product.rentalTotal : itemSubtotal;
                 
                 const proportionalDiscount = discountableSubtotal > 0 ? (itemDiscountableAmount / discountableSubtotal) * totalDiscount : 0;
@@ -1189,34 +1101,29 @@
                     commission: commission,
                     timestamp: firebase.database.ServerValue.TIMESTAMP,
                     type: product.cartItemType,
-                    selectedColor: product.selectedColor || null,
-                    selectedSize: product.selectedSize || null,
                     quantity: product.quantity || null,
                 };
                  if (product.cartItemType === 'rent') {
                     transaction.rentalDays = product.rentalDays;
                     transaction.rentalTotal = product.rentalTotal;
                     transaction.securityDeposit = product.securityDeposit || 0;
-                    transaction.status = 'rented_out';
+                    transaction.status = 'rented_out'; // Status indicates active rental
                     transaction.depositStatus = 'held';
+                    // Note: rentalHandoverTimestamp is NOT set here. Admin sets it.
                 } else {
-                    transaction.status = 'pending';
+                    transaction.status = 'pending_handover'; // New status for sales
                 }
                 
                 await db.ref('transactions/' + transaction.id).set(transaction);
-                
+                 
                 // If it's a sale, decrease stock
                 if (product.cartItemType === 'sale') {
                     const productRef = db.ref(`marketplaceProducts/${product.id}`);
-                    const snap = await productRef.once('value');
-                    const currentProduct = snap.val();
-                    if (currentProduct && currentProduct.inventory && currentProduct.inventory[product.selectedSize]) {
-                        const newStock = currentProduct.inventory[product.selectedSize].stock - product.quantity;
-                        await productRef.child('inventory').child(product.selectedSize).update({ stock: newStock });
-                    }
+                    const newStock = firebase.database.ServerValue.increment(-(product.quantity || 1));
+                    await productRef.update({ stock: newStock });
                 }
                 
-                // Notify admin
+                // Admin is notified of ALL orders now
                 const adminNotifRef = db.ref('adminNotifications').push();
                 await adminNotifRef.set({
                     type: 'new_order',
@@ -1234,8 +1141,11 @@
             showOrderConfirmation();
         }
 
-        function contactAdminForProduct(productTitle) {
-            const message = encodeURIComponent(`Hi, I am interested in your product: ${productTitle}`);
+        function requestToTry(productId, productTitle) {
+            const product = allProducts.find(p => p.id === productId);
+            if (!product) return;
+
+            const message = encodeURIComponent(`Hi, I would like to request a trial for the product: ${productTitle} (ID: ${productId}). My mobile number is ${currentUser.mobile}.`);
             window.open(`https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${message}`, '_blank');
         }
 
@@ -1247,24 +1157,37 @@
 
             if (myRentals.length === 0) {
                 rentalSection.innerHTML = '';
+                if(rentalCountdownInterval) clearInterval(rentalCountdownInterval);
                 return;
             }
 
             const rentalCards = myRentals.map(t => {
-                 const startDate = new Date(t.timestamp);
-                 const dueDate = new Date(startDate);
-                 dueDate.setDate(startDate.getDate() + t.rentalDays);
+                if (t.rentalHandoverTimestamp) {
+                     const startDate = new Date(t.rentalHandoverTimestamp);
+                     const dueDate = new Date(startDate);
+                     dueDate.setDate(startDate.getDate() + t.rentalDays);
 
-                return `
-                    <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500 mb-2">
-                        <div class="flex justify-between items-start">
-                            <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
-                            <span class="text-sm font-semibold text-gray-600">Deposit: ₹${(t.securityDeposit || 0).toFixed(2)}</span>
+                    return `
+                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500 mb-2">
+                            <div class="flex justify-between items-start">
+                                <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
+                                <span class="text-sm font-semibold text-gray-600">Deposit: ₹${(t.securityDeposit || 0).toFixed(2)}</span>
+                            </div>
+                            <p class="text-sm">Due Date: ${dueDate.toLocaleDateString()}</p>
+                            <div class="text-lg font-bold mt-1" data-due-date="${dueDate.toISOString()}"></div>
                         </div>
-                        <p class="text-sm">Due Date: ${dueDate.toLocaleDateString()}</p>
-                        <div class="text-lg font-bold mt-1" data-due-date="${dueDate.toISOString()}"></div>
-                    </div>
-                `;
+                    `;
+                } else {
+                     return `
+                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500 mb-2">
+                            <div class="flex justify-between items-start">
+                                <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
+                                 <span class="text-sm font-semibold text-gray-600">Deposit: ₹${(t.securityDeposit || 0).toFixed(2)}</span>
+                            </div>
+                            <p class="text-md font-bold text-blue-600 mt-2">Awaiting Pickup from Shop</p>
+                        </div>
+                    `;
+                }
             }).join('');
             
             rentalSection.innerHTML = `<h2 class="text-lg font-bold mb-2">My Active Rentals</h2>${rentalCards}`;
@@ -1302,157 +1225,6 @@
             if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
             if (minutes > 0) return `${minutes}m ${seconds}s`;
             return `${seconds}s`;
-        }
-
-        function showVariantSelectionModal(productId, type) {
-            const product = allProducts.find(p => p.id === productId);
-            if (!product) return;
-
-            const modalContainer = document.getElementById('modal-container');
-            const modalContent = document.getElementById('modal-content');
-            
-            const hasComplexVariants = product.inventory && Object.keys(product.inventory).length > 0 && typeof Object.values(product.inventory)[0] === 'object';
-
-            const colorsHtml = (product.colors && product.colors.length > 0)
-                ? `<div class="mt-4"><h4 class="font-semibold">Color</h4><div class="flex flex-wrap gap-2 mt-2">${product.colors.map((c, i) => `
-                    <label class="flex items-center gap-1 cursor-pointer p-2 border rounded-md has-[:checked]:bg-indigo-100 has-[:checked]:border-indigo-500">
-                        <input type="radio" name="color-select" value="${c}" ${i === 0 ? 'checked' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500"> ${c}
-                    </label>`).join('')}</div></div>`
-                : '';
-            
-            const sizes = hasComplexVariants 
-                ? Object.keys(product.inventory).filter(size => product.inventory[size].stock > 0) 
-                : (product.inventory ? Object.keys(product.inventory).filter(size => product.inventory[size] > 0) : []);
-
-            const sizesHtml = (sizes.length > 0)
-                ? `<div class="mt-4"><h4 class="font-semibold">Size</h4><div class="flex flex-wrap gap-2 mt-2">${sizes.map((s, i) => {
-                    const stock = hasComplexVariants ? product.inventory[s].stock : product.inventory[s];
-                    return `<label class="flex items-center gap-1 cursor-pointer p-2 border rounded-md has-[:checked]:bg-indigo-100 has-[:checked]:border-indigo-500">
-                        <input type="radio" name="size-select" value="${s}" ${i === 0 ? 'checked' : ''} data-stock="${stock}" class="w-4 h-4 text-indigo-600 focus:ring-indigo-500"> ${s}
-                    </label>`;
-                }).join('')}</div></div>`
-                : '';
-
-            const quantityHtml = (type === 'sale')
-                ? `<div class="mt-4"><h4 class="font-semibold">Quantity</h4><input type="number" id="quantity-select" value="1" min="1" class="mt-2 border rounded-md p-2 w-20"></div>`
-                : '';
-            
-            const priceDisplayHtml = `<div id="variant-price-display" class="mt-4 text-xl font-bold text-indigo-600"></div>`;
-
-            modalContent.innerHTML = `
-                <div class="p-6">
-                    <div class="flex justify-between items-start">
-                        <h3 class="font-bold text-lg">${product.title} (${type === 'sale' ? 'Sale' : 'Rent'})</h3>
-                        <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-2xl">&times;</button>
-                    </div>
-                    ${colorsHtml}
-                    ${sizesHtml}
-                    ${priceDisplayHtml}
-                    ${quantityHtml}
-                    <div class="mt-6 flex justify-end">
-                        <button id="confirm-add-to-cart-btn" class="bg-indigo-600 text-white font-semibold py-2 px-6 rounded-lg">Add to Cart</button>
-                    </div>
-                </div>
-            `;
-
-            modalContainer.classList.remove('hidden');
-
-            const confirmBtn = document.getElementById('confirm-add-to-cart-btn');
-
-            const updatePriceDisplay = () => {
-                const selectedSize = document.querySelector('input[name="size-select"]:checked')?.value;
-                const priceDisplay = document.getElementById('variant-price-display');
-                if (!priceDisplay) return;
-
-                let priceText = '';
-                if (hasComplexVariants && selectedSize && product.inventory[selectedSize]) {
-                    const variant = product.inventory[selectedSize];
-                    if (type === 'sale' && variant.price) {
-                        priceText = `Price: ₹${variant.price}`;
-                    } else if (type === 'rent' && variant.rentPrice) {
-                        priceText = `Rent: ₹${variant.rentPrice}/day`;
-                    }
-                } else { // Fallback to main price
-                     if (type === 'sale' && product.price) {
-                        priceText = `Price: ₹${product.price}`;
-                    } else if (type === 'rent' && product.rentPrice) {
-                        priceText = `Rent: ₹${product.rentPrice}/day`;
-                    }
-                }
-                priceDisplay.textContent = priceText;
-            };
-
-            document.querySelectorAll('input[name="size-select"]').forEach(radio => {
-                radio.addEventListener('change', updatePriceDisplay);
-            });
-            updatePriceDisplay(); // Initial call
-
-            confirmBtn.addEventListener('click', () => {
-                const selectedColor = document.querySelector('input[name="color-select"]:checked')?.value;
-                const selectedSize = document.querySelector('input[name="size-select"]:checked')?.value;
-                
-                if (sizes.length > 0 && !selectedSize) {
-                    showToast("Please select a size.");
-                    return;
-                }
-                if (product.colors && product.colors.length > 0 && !selectedColor) {
-                    showToast("Please select a color.");
-                    return;
-                }
-
-                const cartItem = { ...product, cartItemType: type, selectedColor, selectedSize };
-                
-                if (hasComplexVariants && selectedSize && product.inventory[selectedSize]) {
-                    const variant = product.inventory[selectedSize];
-                    if (type === 'sale') {
-                        cartItem.price = variant.price || product.price; // fallback
-                    } else if (type === 'rent') {
-                        cartItem.rentPrice = variant.rentPrice || product.rentPrice; // fallback
-                    }
-                } else {
-                    if (type === 'sale') cartItem.price = product.price;
-                    if (type === 'rent') cartItem.rentPrice = product.rentPrice;
-                }
-
-                if (type === 'sale') {
-                    const quantity = parseInt(document.getElementById('quantity-select').value, 10);
-                    const stock = parseInt(document.querySelector('input[name="size-select"]:checked')?.dataset.stock, 10);
-                    if (!isNaN(stock) && quantity > stock) {
-                        showToast(`Only ${stock} items available in size ${selectedSize}.`);
-                        return;
-                    }
-                    cartItem.quantity = quantity;
-                    
-                    cart.push(cartItem);
-                    localStorage.setItem('marketplaceCart', JSON.stringify(cart));
-                    updateCartBadge();
-                    showToast(`${product.title} added to cart!`);
-                    modalContainer.classList.add('hidden');
-                } else if (type === 'rent') {
-                    showRentalModal(productId, cartItem);
-                }
-            });
-            
-            // Logic to update quantity max based on size selection
-            if (type === 'sale') {
-                const quantityInput = document.getElementById('quantity-select');
-                const updateMaxStock = () => {
-                    const selectedSizeRadio = document.querySelector('input[name="size-select"]:checked');
-                    if (selectedSizeRadio) {
-                         const stock = selectedSizeRadio.dataset.stock;
-                         quantityInput.max = stock;
-                         if (parseInt(quantityInput.value, 10) > stock) {
-                             quantityInput.value = stock;
-                         }
-                    }
-                };
-                
-                document.querySelectorAll('input[name="size-select"]').forEach(radio => {
-                    radio.addEventListener('change', updateMaxStock);
-                });
-                
-                updateMaxStock(); // Set initial max
-            }
         }
         
         // --- PROMO CODE LOGIC ---
@@ -1497,7 +1269,7 @@
                 } else { // 'sale'
                     itemHTML = `<div>
                             <p class="font-semibold">${p.title} (Sale)</p>
-                            <p class="text-sm text-gray-600">${p.quantity} x ₹${p.price.toFixed(2)} = ₹${itemSubtotal.toFixed(2)}</p>
+                            <p class="text-sm text-gray-600">${p.quantity || 1} x ₹${p.price.toFixed(2)} = ₹${itemSubtotal.toFixed(2)}</p>
                         </div>`;
                 }
                 return `<div class="flex justify-between items-center border-b pb-2">${itemHTML}<button onclick="removeFromCart(${index})" class="text-red-500 text-xs font-semibold">Remove</button></div>`;
@@ -1559,10 +1331,6 @@
                 try {
                     await db.ref('marketplaceProducts/' + productId).remove();
                     showToast("Listing deleted successfully.");
-                    // Fetch fresh data and re-render
-                    const productsSnap = await db.ref('marketplaceProducts').once('value');
-                    allProducts = Object.values(productsSnap.val() || {});
-                    renderProductGrid();
                 } catch (error) {
                     showToast("Error deleting listing. Please try again.");
                     console.error("Error deleting product:", error);
@@ -1579,15 +1347,6 @@
 
             const listingTypeRadios = ['sale', 'rent', 'both'].map(type => `<label class="flex items-center"><input type="radio" name="editListingType" value="${type}" class="mr-2" ${product.listingType === type ? 'checked' : ''}> ${type.charAt(0).toUpperCase() + type.slice(1)}</label>`).join('');
 
-            const inventoryRows = product.inventory && Object.keys(product.inventory).length > 0
-                ? Object.entries(product.inventory).map(([size, details]) => {
-                    const stock = typeof details === 'object' ? details.stock : details;
-                    const price = typeof details === 'object' ? details.price : '';
-                    const rentPrice = typeof details === 'object' ? details.rentPrice : '';
-                    return `<div class="grid grid-cols-1 sm:grid-cols-5 gap-2 inventory-row items-center p-2 border rounded-md"><input type="text" placeholder="Size" class="sm:col-span-1 border rounded-md p-2 text-sm size-input" value="${size}"><input type="number" placeholder="Stock" class="sm:col-span-1 border rounded-md p-2 text-sm stock-input" min="0" value="${stock}"><input type="number" placeholder="Sale Price" class="sm:col-span-1 border rounded-md p-2 text-sm sale-price-input" step="0.01" min="0" value="${price || ''}"><input type="number" placeholder="Rent Price" class="sm:col-span-1 border rounded-md p-2 text-sm rent-price-input" step="0.01" min="0" value="${rentPrice || ''}"><button type="button" class="sm:col-span-1 text-red-500 font-bold remove-size-btn justify-self-center">&times;</button></div>`;
-                }).join('')
-                : '';
-
             modalContent.innerHTML = `
             <form id="edit-item-form" class="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
                 <div class="flex justify-between items-center">
@@ -1600,11 +1359,8 @@
                 
                 <div id="edit-sale-price-div"><label for="edit-price" class="text-sm font-medium">Sale Price (₹)</label><input type="number" id="edit-price" class="mt-1 block w-full border rounded-md p-2" value="${product.price || ''}"></div>
                 <div id="edit-rent-price-div" class="space-y-2"><label for="edit-rentPrice" class="text-sm font-medium">Rent Price/day (₹)</label><input type="number" id="edit-rentPrice" value="${product.rentPrice || ''}" class="mt-1 block w-full border rounded-md p-2"><label for="edit-securityDeposit" class="text-sm font-medium">Security Deposit (₹)</label><input type="number" id="edit-securityDeposit" value="${product.securityDeposit || ''}" class="mt-1 block w-full border rounded-md p-2"></div>
-
-                <div class="space-y-4 pt-4 border-t">
-                    <div><label for="edit-colors" class="text-sm font-medium">Colors (comma-separated)</label><input type="text" id="edit-colors" value="${(product.colors || []).join(', ')}" class="mt-1 block w-full border rounded-md p-2"></div>
-                    <div><label class="text-sm font-medium">Sizes, Stock & Prices</label><div id="edit-inventory-container" class="space-y-2 mt-2">${inventoryRows}</div><button type="button" id="edit-add-size-btn" class="mt-2 text-sm text-indigo-600 hover:underline">+ Add Size/Variant</button></div>
-                </div>
+                <div><label for="edit-stock" class="text-sm font-medium">Stock</label><input type="number" id="edit-stock" value="${product.stock || 0}" class="mt-1 block w-full border rounded-md p-2"></div>
+                
                 <div class="flex justify-end gap-2 pt-4 border-t"><button type="submit" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md">Save Changes</button></div>
             </form>`;
 
@@ -1612,65 +1368,30 @@
 
             const editForm = document.getElementById('edit-item-form');
             const toggleEditPrices = () => {
-                const hasVariants = editForm.querySelector('.inventory-row');
                 const type = editForm.querySelector('input[name="editListingType"]:checked').value;
-                document.getElementById('edit-sale-price-div').style.display = (type === 'sale' || type === 'both') && !hasVariants ? 'block' : 'none';
+                document.getElementById('edit-sale-price-div').style.display = (type === 'sale' || type === 'both') ? 'block' : 'none';
                 document.getElementById('edit-rent-price-div').style.display = (type === 'rent' || type === 'both') ? 'block' : 'none';
             };
-
-            const addEditSizeRow = () => {
-                const container = document.getElementById('edit-inventory-container');
-                const row = document.createElement('div');
-                row.className = 'grid grid-cols-1 sm:grid-cols-5 gap-2 inventory-row items-center p-2 border rounded-md';
-                row.innerHTML = `<input type="text" placeholder="Size" class="sm:col-span-1 border rounded-md p-2 text-sm size-input"><input type="number" placeholder="Stock" class="sm:col-span-1 border rounded-md p-2 text-sm stock-input" min="0"><input type="number" placeholder="Sale Price" class="sm:col-span-1 border rounded-md p-2 text-sm sale-price-input" step="0.01" min="0"><input type="number" placeholder="Rent Price" class="sm:col-span-1 border rounded-md p-2 text-sm rent-price-input" step="0.01" min="0"><button type="button" class="sm:col-span-1 text-red-500 font-bold remove-size-btn justify-self-center">&times;</button>`;
-                container.appendChild(row);
-                row.querySelector('.remove-size-btn').addEventListener('click', () => { row.remove(); toggleEditPrices(); });
-                toggleEditPrices();
-            };
-
-            editForm.addEventListener('click', e => {
-                if (e.target.id === 'edit-add-size-btn') addEditSizeRow();
-                if (e.target.classList.contains('remove-size-btn')) { e.target.closest('.inventory-row').remove(); toggleEditPrices(); }
-            });
+            
             editForm.querySelectorAll('input[name="editListingType"]').forEach(radio => radio.addEventListener('change', toggleEditPrices));
 
             editForm.addEventListener('submit', async e => {
                 e.preventDefault();
-                const updates = { status: product.status }; // Preserve status
-                const hasVariants = editForm.querySelectorAll('.inventory-row').length > 0;
-                updates.title = document.getElementById('edit-title').value;
-                updates.description = document.getElementById('edit-description').value;
-                updates.listingType = editForm.querySelector('input[name="editListingType"]:checked').value;
-                updates.colors = document.getElementById('edit-colors').value.split(',').map(c => c.trim()).filter(Boolean);
-                
-                if (hasVariants) {
-                    updates.inventory = {};
-                    editForm.querySelectorAll('.inventory-row').forEach(row => {
-                        const size = row.querySelector('.size-input').value.trim().toUpperCase();
-                        if (size) {
-                            updates.inventory[size] = {
-                                stock: parseInt(row.querySelector('.stock-input').value, 10) || 0,
-                                price: parseFloat(row.querySelector('.sale-price-input').value) || null,
-                                rentPrice: parseFloat(row.querySelector('.rent-price-input').value) || null,
-                            };
-                        }
-                    });
-                    updates.price = null;
-                    updates.rentPrice = null;
-                } else {
-                    updates.inventory = {};
-                    updates.price = (updates.listingType !== 'rent') ? parseFloat(document.getElementById('edit-price').value) || null : null;
-                    updates.rentPrice = (updates.listingType !== 'sale') ? parseFloat(document.getElementById('edit-rentPrice').value) || null : null;
-                }
-                updates.securityDeposit = (updates.listingType !== 'sale') ? parseFloat(document.getElementById('edit-securityDeposit').value) || null : null;
+                const updates = { 
+                    status: product.status,
+                    title: document.getElementById('edit-title').value,
+                    description: document.getElementById('edit-description').value,
+                    listingType: editForm.querySelector('input[name="editListingType"]:checked').value,
+                    price: (editForm.querySelector('input[name="editListingType"]:checked').value !== 'rent') ? parseFloat(document.getElementById('edit-price').value) || null : null,
+                    rentPrice: (editForm.querySelector('input[name="editListingType"]:checked').value !== 'sale') ? parseFloat(document.getElementById('edit-rentPrice').value) || null : null,
+                    securityDeposit: (editForm.querySelector('input[name="editListingType"]:checked').value !== 'sale') ? parseFloat(document.getElementById('edit-securityDeposit').value) || null : null,
+                    stock: parseInt(document.getElementById('edit-stock').value, 10) || 0
+                };
 
                 try {
                     await db.ref('marketplaceProducts/' + productId).update(updates);
                     showToast("Listing updated successfully.");
                     modalContainer.classList.add('hidden');
-                    const productsSnap = await db.ref('marketplaceProducts').once('value');
-                    allProducts = Object.values(productsSnap.val() || {});
-                    renderProductGrid();
                 } catch (error) {
                     showToast("Error updating listing.");
                 }
@@ -1750,20 +1471,21 @@
             // Chat FAB
             document.getElementById('chat-fab').addEventListener('click', () => openChat());
 
-            // Add listener to the form's parent to handle dynamic elements
-            const marketplaceContent = document.getElementById('marketplace-content');
-            if (marketplaceContent) {
-                 marketplaceContent.addEventListener('submit', function(e) {
-                    if (e.target && e.target.id === 'list-item-form') {
-                        handleListSubmit(e);
-                    }
-                });
-            }
+            // Add listener to the tab content to handle dynamic forms
+            tabContent.addEventListener('submit', function(e) {
+                if (e.target && ['list-sale-form', 'list-rent-form', 'list-both-form'].includes(e.target.id)) {
+                    handleListSubmit(e);
+                }
+            });
         });
         
         // Make functions globally accessible
         window.openEditForm = openEditForm;
         window.deleteMyProduct = deleteMyProduct;
+        window.requestToTry = requestToTry;
+        window.addToCart = addToCart;
+        window.removeFromCart = removeFromCart;
+        window.placeOrder = placeOrder;
     </script>
 
 
