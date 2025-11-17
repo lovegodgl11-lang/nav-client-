@@ -1,91 +1,213 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="With voice msg and count down "><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>New client update version </title><meta name="title" content="New client update version "><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
+<script>window.livecodes = window.livecodes || {};</script><title>Market place client </title><meta name="title" content="Market place client "><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><style id="__livecodes_styles__"></style><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script>
+<script>window.livecodes = window.livecodes || {};</script><title>Nav client </title><meta name="title" content="Nav client "><meta name="description" content="With voice msg and count down "><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script>
 
 
 
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Customer Portal - Navrose Stitching Point</title>
+    <title>Customer Portal v2.0 - Navrose Stitching Point</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+        
+        :root {
+            --color-primary: #14b8a6; /* Teal */
+            --color-secondary: #6366f1; /* Indigo */
+            --color-text: #2d3748; /* Dark Slate */
+            --color-text-light: #718096; /* Medium Slate */
+            --color-bg: #f7f8fc;
+            --color-card-bg: #ffffff;
+            --color-border: #e2e8f0;
+        }
+
+        html { scroll-behavior: smooth; }
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+        }
+        
+        /* Version 2.0 UI Styles */
+        .tab-btn.active { 
+            border-color: var(--color-primary); 
+            color: var(--color-primary); 
+            font-weight: 600;
+        }
+        .marketplace-tab-btn.active {
+            border-color: var(--color-secondary) !important;
+            color: var(--color-secondary) !important;
+            background-color: #f0f0ff;
+        }
+        .list-form-tab-btn.active { 
+            border-color: var(--color-secondary); 
+            color: var(--color-secondary);
+        }
+        .modal { 
+            background-color: rgba(15, 23, 42, 0.6); 
+            backdrop-filter: blur(5px); 
+            -webkit-backdrop-filter: blur(5px);
+        }
+        
+        .chat-bubble { max-width: 75%; padding: 10px 16px; border-radius: 18px; }
+        .chat-bubble.sent { background-color: var(--color-secondary); color: white; align-self: flex-end; }
+        .chat-bubble.received { background-color: #e5e7eb; color: #1f2937; align-self: flex-start; }
+        
+        /* Buttons */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #0d9488; /* Darker Teal */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+        }
+        .btn-secondary {
+            background-color: transparent;
+            color: var(--color-text);
+            border: 2px solid var(--color-border);
+        }
+        .btn-secondary:hover {
+            background-color: var(--color-bg);
+            border-color: #cbd5e1;
+        }
+        
+        /* Marketplace Slider Styles v2.0 */
+        .slider-container { position: relative; }
+        .slider-wrapper {
+            display: flex;
+            gap: 1.5rem;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 1.5rem;
+            scrollbar-width: none;
+        }
+        .slider-wrapper::-webkit-scrollbar { display: none; }
+        
+        .product-card-v2 {
+            flex: 0 0 90%;
+            max-width: 90%;
+            scroll-snap-align: start;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            background-color: var(--color-card-bg);
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        @media (min-width: 640px) { .product-card-v2 { flex-basis: calc(50% - 0.75rem); max-width: calc(50% - 0.75rem); } }
+        @media (min-width: 1024px) { .product-card-v2 { flex-basis: calc(33.333% - 1rem); max-width: calc(33.333% - 1rem); } }
+        
+        .product-card-v2:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+        }
+        .product-card-v2 .image-container {
+            position: relative;
+            aspect-ratio: 4 / 3;
+            overflow: hidden;
             background-color: #f3f4f6;
         }
-        .tab-btn.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff;}
-        .list-form-tab-btn.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff;}
-        .product-card { transition: transform 0.2s, box-shadow 0.2s; }
-        .product-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
-        .modal { background-color: rgba(0,0,0,0.5); }
-        .hidden-form-field { display: none; }
-        
-        /* New Styles */
-        .notification-dropdown { max-height: 80vh; }
-        .chat-modal { max-height: 80vh; }
-        .chat-bubble { max-width: 75%; padding: 8px 12px; border-radius: 12px; }
-        .chat-bubble.sent { background-color: #4f46e5; color: white; align-self: flex-end; }
-        .chat-bubble.received { background-color: #e5e7eb; color: #1f2937; align-self: flex-start; }
+        .product-card-v2 .image-container img {
+            width: 100%; height: 100%; object-fit: cover;
+            transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        .product-card-v2:hover .image-container img {
+            transform: scale(1.05);
+        }
+
+        .slider-nav-btn {
+            position: absolute; top: 40%; transform: translateY(-50%); z-index: 10;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 9999px;
+            width: 3rem; height: 3rem;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            cursor: pointer; transition: all 0.2s ease;
+            opacity: 0;
+        }
+        .slider-container:hover .slider-nav-btn { opacity: 1; }
+        .slider-nav-btn:hover { background-color: white; transform: translateY(-50%) scale(1.1); }
+        .slider-nav-btn.prev { left: -1.5rem; }
+        .slider-nav-btn.next { right: -1.5rem; }
+        @media (max-width: 768px) { .slider-nav-btn { display: none; } }
+
     </style>
 
 
-    <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
-        <div class="w-full max-w-sm mx-auto bg-white p-8 rounded-2xl shadow-lg">
-            <h2 class="text-2xl font-bold text-center mb-2">Customer Portal</h2>
-            <p class="text-center text-gray-600 mb-6">Enter your mobile number to view your orders and use the marketplace.</p>
+    <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gray-100" style="background-image: url('data:image/svg+xml,%3Csvg width=%2260%22 height=%2260%22 viewBox=%220 0 60 60%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cg fill=%22none%22 fill-rule=%22evenodd%22%3E%3Cg fill=%22%23e2e8f0%22 fill-opacity=%220.4%22%3E%3Cpath d=%22M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');">
+        <div class="w-full max-w-md mx-auto bg-white p-8 md:p-12 rounded-2xl shadow-2xl">
+            <h2 class="text-3xl font-extrabold text-center text-slate-800 mb-2">Customer Portal 2.0</h2>
+            <p class="text-center text-gray-600 mb-8">Login to view your orders and explore the marketplace.</p>
             <form id="login-form">
-                <div class="mb-4">
-                    <label for="mobile-number" class="block text-sm font-medium text-gray-700">Mobile Number</label>
-                    <input type="tel" id="mobile-number" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required="" placeholder="e.g., 9876543210">
+                <div class="mb-6">
+                    <label for="mobile-number" class="block text-sm font-medium text-gray-700 sr-only">Mobile Number</label>
+                    <input type="tel" id="mobile-number" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-lg" required="" placeholder="10-digit mobile number">
                 </div>
-                <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 font-semibold">Login</button>
+                <button type="submit" class="w-full bg-teal-600 text-white py-3 px-4 rounded-lg hover:bg-teal-700 font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-teal-300">Login</button>
             </form>
         </div>
     </div>
 
-    <div id="main-view" class="hidden w-full max-w-4xl mx-auto p-4">
-        <header class="flex justify-between items-center mb-4 border-b pb-4">
-            <h1 class="text-xl font-bold">Welcome, <span id="customer-name-display"></span>!</h1>
+    <div id="main-view" class="hidden w-full max-w-6xl mx-auto p-4 md:p-6">
+        <header class="flex justify-between items-center mb-6 border-b pb-4">
+            <h1 class="text-3xl font-bold text-slate-800">Welcome, <span id="customer-name-display"></span>!</h1>
             <div class="flex items-center gap-4">
-                <button id="cart-btn" class="relative text-gray-600 hover:text-indigo-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                    <span id="cart-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden"></span>
+                <button id="cart-btn" class="relative text-gray-500 hover:text-teal-600 transition-transform hover:scale-110">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    <span id="cart-badge" class="absolute -top-1 -right-1 bg-rose-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-semibold hidden"></span>
                 </button>
-                <button id="voice-toggle-btn" class="text-gray-600 hover:text-indigo-600" title="Toggle Sound Notifications">
+                <button id="voice-toggle-btn" class="text-gray-500 hover:text-teal-600 transition-transform hover:scale-110" title="Toggle Sound Notifications">
                     <!-- Speaker Icon (will be toggled) -->
                 </button>
                 <div id="notification-bell-container" class="relative">
-                    <button id="notification-bell" class="relative text-gray-600 hover:text-indigo-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-                        <span id="notification-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden"></span>
+                    <button id="notification-bell" class="relative text-gray-500 hover:text-teal-600 transition-transform hover:scale-110">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                        <span id="notification-badge" class="absolute -top-1 -right-1 bg-rose-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-semibold hidden"></span>
                     </button>
-                    <div id="notification-dropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl p-2 hidden z-20 border notification-dropdown"></div>
+                    <div id="notification-dropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl p-2 hidden z-20 border max-h-[80vh] overflow-y-auto"></div>
                 </div>
-                <button id="logout-btn" class="text-sm text-red-600 hover:underline">Logout</button>
+                <button id="logout-btn" class="text-sm text-rose-600 hover:underline font-semibold">Logout</button>
             </div>
         </header>
         
-        <div id="active-rentals-section" class="mb-6"></div>
+        <div id="active-rentals-section" class="mb-8"></div>
 
-        <div class="border-b border-gray-200 mb-4">
-            <nav class="-mb-px flex space-x-4" aria-label="Tabs">
-                <button data-tab="my-orders" class="tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">My Stitching Orders</button>
-                <button data-tab="my-ledger" class="tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">Marketplace Ledger</button>
-                <button data-tab="marketplace" class="tab-btn whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">Marketplace</button>
+        <div class="border-b border-gray-200 mb-8">
+            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                <button data-tab="my-orders" class="tab-btn active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-base">My Stitching Orders</button>
+                <button data-tab="my-ledger" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-base">Marketplace Ledger</button>
+                <button data-tab="marketplace" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-base">Marketplace</button>
             </nav>
         </div>
 
         <div id="tab-content"></div>
         
-        <footer class="text-center p-4 mt-8 text-xs text-gray-500">
-            Navrose Stitching Point © 2024 | <a href="#" id="tnc-link" class="hover:underline">Terms &amp; Conditions</a>
+        <footer class="text-center p-4 mt-12 text-xs text-gray-500">
+            Navrose Stitching Point v2.0 © 2024 | <a href="#" id="tnc-link" class="hover:underline">Terms &amp; Conditions</a>
         </footer>
     </div>
 
@@ -115,7 +237,7 @@
     <!-- Promotion Modal -->
     <div id="promotion-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden modal">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col">
-            <div class="p-4 border-b bg-indigo-500 text-white rounded-t-lg">
+            <div class="p-4 border-b bg-secondary text-white rounded-t-lg" style="background-color: var(--color-secondary);">
                 <h3 class="text-lg font-bold">A Message from Navrose Stitching Point</h3>
             </div>
             <div id="promotion-message-content" class="p-6 overflow-y-auto"></div>
@@ -125,8 +247,8 @@
         </div>
     </div>
     
-    <button id="chat-fab" class="fixed bottom-6 right-6 bg-indigo-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-indigo-700 transition-transform hover:scale-110 z-30" title="Chat with Admin">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd"></path></svg>
+    <button id="chat-fab" class="fixed bottom-6 right-6 bg-secondary text-white w-16 h-16 rounded-full shadow-lg flex items-center justify-center hover:bg-indigo-700 transition-transform hover:scale-110 z-30" title="Chat with Admin" style="background-color: var(--color-secondary);">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd"></path></svg>
     </button>
     
     <div id="toast" class="hidden fixed bottom-5 right-5 bg-gray-900 text-white py-2 px-4 rounded-lg shadow-lg z-50"></div>
@@ -158,6 +280,7 @@
 
         let notificationListener = null;
         let chatListener = null;
+        let stitchingOrderListener = null;
         let sellerListeners = [];
 
         const loginView = document.getElementById('login-view');
@@ -220,6 +343,7 @@
             setupNotificationListener();
             setupSellerListeners();
             setupChatListener();
+            setupStitchingOrderListener();
             renderMyActiveRentals();
             switchTab('my-orders');
         }
@@ -227,6 +351,7 @@
         document.getElementById('logout-btn').addEventListener('click', () => {
              if (notificationListener) notificationListener.off();
              if (chatListener) chatListener.off();
+             if (stitchingOrderListener) stitchingOrderListener.off();
              if (rentalCountdownInterval) clearInterval(rentalCountdownInterval);
              sellerListeners.forEach(listener => listener.ref.off(listener.event));
              sellerListeners = [];
@@ -260,7 +385,7 @@
             const orders = Object.values(snapshot.val() || {});
 
             if (orders.length === 0) {
-                 tabContent.innerHTML = `<p>You have no stitching orders.</p>`;
+                 tabContent.innerHTML = `<div class="text-center p-8 bg-white rounded-lg shadow"><p class="text-gray-600">You have no stitching orders.</p></div>`;
                  return;
             }
 
@@ -270,12 +395,12 @@
                         const itemsList = o.items ? o.items.map(i => i.item).join(', ') : o.description;
                         const pickupDate = o.items ? o.items[0]?.pickupDate : o.pickupDate;
                         return `
-                        <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <div class="bg-white p-4 rounded-lg shadow-md transition-transform hover:scale-105">
                             <div class="flex justify-between items-start">
-                                <h3 class="font-bold">Order #${o.orderNumber}</h3>
+                                <h3 class="font-bold text-lg text-slate-800">Order #${o.orderNumber}</h3>
                                 <span class="text-xs font-semibold px-2 py-1 rounded-full ${o.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${o.status}</span>
                             </div>
-                            <p class="text-sm text-gray-600">Items: ${itemsList}</p>
+                            <p class="text-sm text-gray-600 mt-2">Items: ${itemsList}</p>
                             <p class="text-sm text-gray-600">Pickup Date: ${pickupDate || 'N/A'}</p>
                         </div>
                     `}).join('')}
@@ -292,7 +417,7 @@
             const myTransactions = allTransactions.filter(t => t.buyerMobile === currentUser.mobile || t.sellerMobile === currentUser.mobile);
 
             if (myTransactions.length === 0) {
-                tabContent.innerHTML = `<p class="text-center text-gray-600 mt-4">You have no marketplace transactions yet.</p>`;
+                tabContent.innerHTML = `<div class="text-center p-8 bg-white rounded-lg shadow"><p class="text-gray-600">You have no marketplace transactions yet.</p></div>`;
                 return;
             }
 
@@ -343,8 +468,8 @@
                     <tr class="border-b ${line.isDeposit ? 'bg-gray-50 text-gray-600' : ''}">
                         <td class="p-3">${new Date(line.date).toLocaleDateString()}</td>
                         <td class="p-3">${line.description}</td>
-                        <td class="p-3 font-mono text-right text-red-600">${line.debit > 0 ? `₹${line.debit.toFixed(2)}` : ''}</td>
-                        <td class="p-3 font-mono text-right text-green-600">${line.credit > 0 ? `₹${line.credit.toFixed(2)}` : ''}</td>
+                        <td class="p-3 font-mono text-right text-rose-600">${line.debit > 0 ? `₹${line.debit.toFixed(2)}` : ''}</td>
+                        <td class="p-3 font-mono text-right text-teal-600">${line.credit > 0 ? `₹${line.credit.toFixed(2)}` : ''}</td>
                     </tr>
                 `;
             }).join('');
@@ -352,7 +477,7 @@
             const netBalance = totalCredit - totalDebit;
 
             tabContent.innerHTML = `
-                <div class="bg-white p-4 rounded-lg shadow-sm overflow-x-auto">
+                <div class="bg-white p-4 rounded-lg shadow-md overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="text-left bg-gray-50">
                             <tr>
@@ -366,12 +491,12 @@
                         <tfoot class="font-bold bg-gray-100">
                             <tr>
                                 <td colspan="2" class="p-3 text-right">Totals</td>
-                                <td class="p-3 font-mono text-right text-red-600">₹${totalDebit.toFixed(2)}</td>
-                                <td class="p-3 font-mono text-right text-green-600">₹${totalCredit.toFixed(2)}</td>
+                                <td class="p-3 font-mono text-right text-rose-600">₹${totalDebit.toFixed(2)}</td>
+                                <td class="p-3 font-mono text-right text-teal-600">₹${totalCredit.toFixed(2)}</td>
                             </tr>
                             <tr>
                                 <td colspan="3" class="p-3 text-right">Net Balance</td>
-                                <td class="p-3 font-mono text-right ${netBalance >= 0 ? 'text-green-600' : 'text-red-600'}">₹${netBalance.toFixed(2)}</td>
+                                <td class="p-3 font-mono text-right ${netBalance >= 0 ? 'text-teal-600' : 'text-rose-600'}">₹${netBalance.toFixed(2)}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -389,8 +514,8 @@
              `;
              document.querySelectorAll('.marketplace-tab-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('.marketplace-tab-btn').forEach(b => b.classList.remove('active', 'text-indigo-600', 'border-indigo-600'));
-                    e.target.classList.add('active', 'text-indigo-600', 'border-indigo-600');
+                    document.querySelectorAll('.marketplace-tab-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
                     if (e.target.dataset.subtab === 'browse') renderProductGrid();
                     else renderListItemForm();
                 });
@@ -406,8 +531,10 @@
             const productsData = productsSnap.val() || {};
             allProducts = Object.values(productsData).filter(p => p.status === 'approved' || p.status === 'sold' || p.sellerMobile === currentUser.mobile);
             
-            if(allProducts.length === 0) {
-                content.innerHTML = `<p>No items in the marketplace yet.</p>`;
+            const availableProducts = allProducts.filter(p => p.status === 'approved');
+            
+            if(availableProducts.length === 0) {
+                content.innerHTML = `<div class="text-center p-8 bg-white rounded-lg shadow"><p class="text-gray-600">No items in the marketplace yet.</p></div>`;
                 return;
             }
             
@@ -418,72 +545,121 @@
             );
 
             const getGoogleDriveImageUrl = (sharingUrl) => {
-                if (!sharingUrl || !sharingUrl.includes('drive.google.com')) return sharingUrl || 'https://via.placeholder.com/300x200.png?text=No+Image';
+                if (!sharingUrl || !sharingUrl.includes('drive.google.com')) return sharingUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
                 const fileIdMatch = sharingUrl.match(/file\/d\/([a-zA-Z0-9_-]+)/);
                 if (fileIdMatch && fileIdMatch[1]) return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
                 return 'https://via.placeholder.com/300x200.png?text=Invalid+Link';
             };
 
-            content.innerHTML = `
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    ${allProducts.map(p => {
-                        const imageUrl = getGoogleDriveImageUrl(p.imageUrl);
-                        const isRented = activeRentals.has(p.id);
-                        const isSold = p.status === 'sold' || (p.stock !== undefined && p.stock <= 0);
-                        
-                        let priceHTML = '';
-                        if ((p.listingType === 'sale' || p.listingType === 'both') && p.price) {
-                            priceHTML += `<p class="text-lg font-semibold text-indigo-600">Buy for ₹${p.price}</p>`;
-                        }
-                        if ((p.listingType === 'rent' || p.listingType === 'both') && p.rentPrice) {
-                            priceHTML += `<p class="text-md text-gray-700">Rent for ₹${p.rentPrice}/day</p>`;
-                        }
+            const createProductCard = (p) => {
+                const imageUrl = getGoogleDriveImageUrl(p.imageUrl);
+                const isRented = activeRentals.has(p.id);
+                const isSold = p.status === 'sold' || (p.stock !== undefined && p.stock <= 0);
+                
+                let priceHTML = '';
+                if ((p.listingType === 'sale' || p.listingType === 'both') && p.price) {
+                    priceHTML += `<p class="text-2xl font-bold text-teal-600">Buy for ₹${p.price}</p>`;
+                }
+                if ((p.listingType === 'rent' || p.listingType === 'both') && p.rentPrice) {
+                    priceHTML += `<p class="text-lg text-gray-700">Rent for ₹${p.rentPrice}<span class="text-sm font-normal text-gray-500">/day</span></p>`;
+                }
 
-                        let rentStatusHTML = '';
-                        if (p.listingType === 'rent' || p.listingType === 'both') {
-                             if(isRented) {
-                                rentStatusHTML = `<div class="w-full text-center text-amber-600 font-bold p-2 bg-amber-100 rounded-md">Currently Rented</div>`;
-                            }
-                        }
+                let statusOverlayHTML = '';
+                if (isRented) {
+                    statusOverlayHTML = `<div class="absolute top-3 right-3 bg-amber-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Rented Out</div>`;
+                } else if (isSold) {
+                    statusOverlayHTML = `<div class="absolute top-3 right-3 bg-rose-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Out of Stock</div>`;
+                }
+                
+                let actionButtons = '';
+                if (p.sellerMobile === currentUser.mobile) {
+                    actionButtons = `
+                        <button onclick="openEditForm('${p.id}')" class="btn btn-secondary flex-1 text-sm !py-2">Edit</button>
+                        <button onclick="deleteMyProduct('${p.id}')" class="btn bg-rose-500 hover:bg-rose-600 text-white flex-1 text-sm !py-2">Delete</button>
+                    `;
+                } else {
+                    const disabledState = isRented || isSold ? 'opacity-50 cursor-not-allowed' : '';
+                    actionButtons = `
+                        <button onclick="requestToTry('${p.id}', '${p.title}')" class="btn btn-secondary flex-1 text-sm !py-2 ${disabledState}" ${isRented || isSold ? 'disabled' : ''}>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C3.732 4.943 9.522 3 10 3s6.268 1.943 9.542 7c-3.274 5.057-9.062 7-9.542 7S3.274 15.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg>
+                            <span>Trial</span>
+                        </button>
+                        <button onclick="addToCart('${p.id}')" class="btn btn-primary flex-1 text-sm !py-2 ${disabledState}" ${isRented || isSold ? 'disabled' : ''}>
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" /></svg>
+                            <span>Add to Cart</span>
+                        </button>
+                    `;
+                }
 
-                        let actionButtons = '';
-                        if (isSold) {
-                            actionButtons = `<div class="w-full text-center text-red-600 font-bold p-2 bg-red-100 rounded-md">Out of Stock</div>`;
-                        } else if (p.sellerMobile === currentUser.mobile) {
-                            actionButtons = `
-                                <button onclick="openEditForm('${p.id}')" class="w-1/2 bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 font-semibold text-sm">Edit</button>
-                                <button onclick="deleteMyProduct('${p.id}')" class="w-1/2 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 font-semibold text-sm">Delete</button>
-                            `;
-                        } else {
-                            actionButtons = `
-                                <button onclick="requestToTry('${p.id}', '${p.title}')" class="w-1/2 bg-gray-200 text-gray-800 py-2 rounded-md hover:bg-gray-300 font-semibold text-sm">Request to Try</button>
-                                <button onclick="addToCart('${p.id}')" class="w-1/2 bg-indigo-500 text-white py-2 rounded-md hover:bg-indigo-600 font-semibold text-sm ${isRented ? 'opacity-50 cursor-not-allowed' : ''}" ${isRented ? 'disabled' : ''}>Add to Cart</button>
-                            `;
-                        }
+                return `
+                <div class="product-card-v2">
+                    <div class="image-container">
+                        <img src="${imageUrl}" alt="${p.title}">
+                        ${statusOverlayHTML}
+                    </div>
+                    <div class="p-5 flex flex-col flex-grow">
+                        <h3 class="font-bold text-xl text-gray-800 leading-tight">${p.title}</h3>
+                        <p class="text-sm text-gray-500 mt-2 flex-grow min-h-[40px]">${p.description}</p>
+                        <div class="mt-4 space-y-1">${priceHTML}</div>
+                        <div class="mt-auto pt-5 flex gap-3">${actionButtons}</div>
+                    </div>
+                </div>`;
+            };
 
-                        return `
-                        <div class="product-card bg-white rounded-lg shadow-sm overflow-hidden flex flex-col">
-                            <img src="${imageUrl}" alt="${p.title}" class="w-full h-48 object-cover">
-                            <div class="p-4 flex flex-col flex-grow">
-                                <h3 class="font-bold text-lg text-gray-800">${p.title}</h3>
-                                <p class="text-sm text-gray-600 mt-1 flex-grow">${p.description}</p>
-                                <div class="mt-4">${priceHTML}</div>
-                                <div class="mt-2">${rentStatusHTML}</div>
-                                <div class="mt-auto pt-4 flex gap-2">${actionButtons}</div>
+            const createSliderSection = (title, products, sliderId) => {
+                if (products.length === 0) return '';
+                return `
+                    <div class="mb-12">
+                        <h2 class="text-3xl font-bold text-slate-800 mb-6">${title}</h2>
+                        <div class="slider-container">
+                            <div id="${sliderId}" class="slider-wrapper">
+                                ${products.map(createProductCard).join('')}
                             </div>
+                            <div class="slider-nav-btn prev" data-target="${sliderId}"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></div>
+                            <div class="slider-nav-btn next" data-target="${sliderId}"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></div>
                         </div>
-                    `}).join('')}
+                    </div>
+                `;
+            };
+            
+            const saleProducts = availableProducts.filter(p => p.listingType === 'sale' || p.listingType === 'both');
+            const rentProducts = availableProducts.filter(p => p.listingType === 'rent' || p.listingType === 'both');
+
+            content.innerHTML = `
+                <div class="hero-section bg-teal-500 rounded-xl text-white p-8 md:p-12 mb-12 text-center shadow-xl" style="background: linear-gradient(45deg, var(--color-primary), #2dd4bf);">
+                    <h1 class="text-4xl md:text-5xl font-extrabold mb-2">Curated Marketplace</h1>
+                    <p class="max-w-2xl mx-auto text-teal-100">Discover unique pieces to buy or rent from our community.</p>
                 </div>
+                ${createSliderSection('Featured For Sale', saleProducts, 'sale-slider')}
+                ${createSliderSection('Available for Rent', rentProducts, 'rent-slider')}
             `;
+            
+            setupSliders();
         }
+
+        function setupSliders() {
+            document.querySelectorAll('.slider-nav-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const wrapper = document.getElementById(button.dataset.target);
+                    const cardWidth = wrapper.querySelector('.product-card-v2').offsetWidth;
+                    const scrollAmount = cardWidth + 24; // Card width + gap
+                    if (button.classList.contains('prev')) {
+                        wrapper.scrollLeft -= scrollAmount;
+                    } else {
+                        wrapper.scrollLeft += scrollAmount;
+                    }
+                });
+            });
+        }
+
 
         function renderListItemForm() {
             const content = document.getElementById('marketplace-content');
             
             const commonFields = `
-                <div class="bg-blue-50 border-l-4 border-blue-400 text-blue-700 p-4 rounded-md" role="alert">
+                <div class="bg-blue-50 border-l-4 border-blue-400 text-blue-800 p-4 rounded-md" role="alert">
                     <p class="font-bold">Image Upload Instructions</p>
-                    <p>After submitting this form, please send the product photo via WhatsApp to the admin. The image will be added to your listing shortly.</p>
+                    <p class="text-sm">After submitting this form, please send the product photo via WhatsApp to the admin. The image will be added to your listing shortly.</p>
                 </div>
                 <div>
                     <label for="title" class="block text-sm font-medium text-gray-700">Title</label>
@@ -518,21 +694,21 @@
             `;
 
             const renderSaleForm = () => `
-                <form id="list-sale-form" class="bg-white p-6 rounded-lg shadow-sm space-y-4">
+                <form id="list-sale-form" class="bg-white p-6 rounded-lg shadow-md space-y-4">
                     ${commonFields}
                     ${saleFields}
                     <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 font-semibold">List Item for Approval</button>
                 </form>
             `;
             const renderRentForm = () => `
-                <form id="list-rent-form" class="bg-white p-6 rounded-lg shadow-sm space-y-4">
+                <form id="list-rent-form" class="bg-white p-6 rounded-lg shadow-md space-y-4">
                     ${commonFields}
                     ${rentFields}
                     <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 font-semibold">List Item for Approval</button>
                 </form>
             `;
             const renderBothForm = () => `
-                <form id="list-both-form" class="bg-white p-6 rounded-lg shadow-sm space-y-4">
+                <form id="list-both-form" class="bg-white p-6 rounded-lg shadow-md space-y-4">
                     ${commonFields}
                     <div class="pt-4 border-t"><h4 class="font-semibold mb-2">Sale Details</h4>${saleFields}</div>
                     <div class="pt-4 border-t"><h4 class="font-semibold mb-2">Rent Details</h4>${rentFields}</div>
@@ -653,7 +829,7 @@
                 return;
             }
             dropdown.innerHTML = notifications.map(n => `
-                <div class="p-3 border-b text-sm cursor-pointer ${n.read ? 'text-gray-500' : 'font-semibold text-gray-800 bg-indigo-50'}">
+                <div class="p-3 border-b text-sm cursor-pointer ${n.read ? 'text-gray-500' : 'font-semibold text-gray-800 bg-teal-50'}">
                     ${n.message}
                 </div>
             `).join('');
@@ -740,7 +916,7 @@
             const modalContent = document.getElementById('modal-content');
 
             modalContent.innerHTML = `
-                <div class="flex flex-col chat-modal">
+                <div class="flex flex-col max-h-[80vh]">
                     <div class="p-4 border-b flex justify-between items-center">
                         <h3 class="font-bold">Chat with ${otherUserName}</h3>
                         <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-2xl">&times;</button>
@@ -806,9 +982,45 @@
              messagesRef.on('child_added', (snapshot) => {
                 const msg = snapshot.val();
                 if(msg && msg.sender !== currentUser.mobile){
-                   addNotification("You have a new message from Admin.");
+                   // Intentionally left blank. Notifications for chat are handled by `setupNotificationListener`
+                   // to avoid duplicate voice messages and alerts. The admin panel sends a dedicated notification
+                   // for each chat message.
                 }
              });
+        }
+
+        function setupStitchingOrderListener() {
+            if (!currentUser) return;
+            let initialLoad = true;
+            let cachedOrders = {};
+            stitchingOrderListener = db.ref('orders').orderByChild('customerMobile').equalTo(currentUser.mobile);
+            
+            stitchingOrderListener.on('value', (snapshot) => {
+                const orders = snapshot.val() || {};
+                if (initialLoad) {
+                    cachedOrders = orders;
+                    initialLoad = false;
+                    return;
+                }
+
+                for (const orderId in orders) {
+                    if (orders.hasOwnProperty(orderId)) {
+                        const newOrder = orders[orderId];
+                        const oldOrder = cachedOrders[orderId];
+
+                        if (!oldOrder) {
+                            addNotification(`A new stitching order #${newOrder.orderNumber} has been added.`);
+                        } else if (oldOrder.status !== newOrder.status) {
+                            if (newOrder.status === 'Completed') {
+                                addNotification(`Your stitching order #${newOrder.orderNumber} is now complete and ready for pickup.`);
+                            } else {
+                                addNotification(`Update for order #${newOrder.orderNumber}: status is now ${newOrder.status}.`);
+                            }
+                        }
+                    }
+                }
+                cachedOrders = orders;
+            });
         }
         
         // --- CART LOGIC ---
@@ -1070,7 +1282,7 @@
             }
 
             for (const product of cart) {
-                const itemSubtotal = product.cartItemType === 'rent' ? product.rentalTotal + (product.securityDeposit || 0) : (parseFloat(product.price) || 0) * (product.quantity || 1);
+                const itemSubtotal = product.cartItemType === 'rent' ? product.rentalTotal + (p.securityDeposit || 0) : (parseFloat(p.price) || 0) * (p.quantity || 1);
                 const itemDiscountableAmount = product.cartItemType === 'rent' ? product.rentalTotal : itemSubtotal;
                 
                 const proportionalDiscount = discountableSubtotal > 0 ? (itemDiscountableAmount / discountableSubtotal) * totalDiscount : 0;
@@ -1168,7 +1380,7 @@
                      dueDate.setDate(startDate.getDate() + t.rentalDays);
 
                     return `
-                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500 mb-2">
+                        <div class="bg-white p-4 rounded-lg shadow-md border-l-4 border-amber-500 mb-2">
                             <div class="flex justify-between items-start">
                                 <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
                                 <span class="text-sm font-semibold text-gray-600">Deposit: ₹${(t.securityDeposit || 0).toFixed(2)}</span>
@@ -1179,7 +1391,7 @@
                     `;
                 } else {
                      return `
-                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500 mb-2">
+                        <div class="bg-white p-4 rounded-lg shadow-md border-l-4 border-blue-500 mb-2">
                             <div class="flex justify-between items-start">
                                 <p class="font-bold">Rented: ${allProducts.find(p => p.id === t.productId)?.title || 'Item'}</p>
                                  <span class="text-sm font-semibold text-gray-600">Deposit: ₹${(t.securityDeposit || 0).toFixed(2)}</span>
@@ -1190,7 +1402,7 @@
                 }
             }).join('');
             
-            rentalSection.innerHTML = `<h2 class="text-lg font-bold mb-2">My Active Rentals</h2>${rentalCards}`;
+            rentalSection.innerHTML = `<h2 class="text-xl font-bold mb-3">My Active Rentals</h2>${rentalCards}`;
             
             updateCountdownTimers();
             if (rentalCountdownInterval) clearInterval(rentalCountdownInterval);
@@ -1489,4 +1701,4 @@
     </script>
 
 
-<script src="./script.js"></script></body></html>
+<script src="./script.js"></script><script></script><script src="./script.js"></script></body></html>
